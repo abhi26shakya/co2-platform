@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/*
+  Design tokens - "orbital observation" palette.
+  Dark-first: deep pre-dawn navy ground, instrument-white text,
+  and a plume gradient (amber -> magenta) reserved EXCLUSIVELY for
+  emission-intensity data. UI chrome never uses plume colors, so
+  wherever the eye sees warmth, it is seeing data.
+*/
+@theme {
+  --color-ground-950: #070b12;   /* page background */
+  --color-ground-900: #0b1220;   /* raised surfaces */
+  --color-ground-800: #121b2e;   /* cards */
+  --color-ground-700: #1c2942;   /* borders, dividers */
+  --color-ground-400: #64748b;   /* muted text */
+  --color-instrument: #e6edf7;   /* primary text - slightly cool white */
+  --color-plume-low: #f5a623;    /* low emission intensity */
+  --color-plume-high: #e64980;   /* high emission intensity / hotspots */
+  --color-sensor: #34d399;       /* healthy / confidence / success */
+  --color-alert: #f87171;        /* errors */
+
+  --font-display: var(--font-space-grotesk), sans-serif;
+  --font-sans: var(--font-inter), sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ground-950);
+  color: var(--color-instrument);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Data readouts (stats, coordinates, ppm values) always use the mono face. */
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* The plume gradient - only ever applied to emission data. */
+.plume-gradient {
+  background-image: linear-gradient(90deg, var(--color-plume-low), var(--color-plume-high));
+}
+.plume-text {
+  background-image: linear-gradient(90deg, var(--color-plume-low), var(--color-plume-high));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

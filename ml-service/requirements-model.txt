@@ -1,0 +1,5 @@
+# Uncomment when integrating the real model:
+# torch
+# rasterio
+# numpy
+# pillow
