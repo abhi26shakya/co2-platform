@@ -22,3 +22,7 @@ backend/storage/
 .DS_Store
 .idea/
 .vscode/
+
+# Local env files
+.env.local
+frontend/.env.local

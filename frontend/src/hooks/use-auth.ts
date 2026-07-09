@@ -55,3 +55,14 @@ export function useLogout() {
     },
   });
 }
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { full_name: string }) =>
+      api.patch<UserRead>("/auth/me", data),
+    onSuccess: (updatedUser) => {
+      qc.setQueryData(["me"], updatedUser);
+    },
+  });
+}

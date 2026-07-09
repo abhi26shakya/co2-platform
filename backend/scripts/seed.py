@@ -49,7 +49,7 @@ async def seed() -> None:
                     version="mock-0.1.0",
                     architecture="U-Net (placeholder)",
                     is_active=True,
-                    last_trained_at=datetime.now(UTC),
+                    trained_at=datetime.now(UTC),
                 )
             )
             print("created model registry row mock-0.1.0")
@@ -59,7 +59,7 @@ async def seed() -> None:
                 session.add(
                     Plant(
                         name=name, country=country, capacity_mw=cap,
-                        lat=lat, lon=lon, source="seed", external_id=ext_id,
+                        lat=lat, lon=lon, fuel_type="coal", external_id=ext_id,
                     )
                 )
         await session.commit()

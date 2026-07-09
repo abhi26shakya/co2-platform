@@ -4,6 +4,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { Card } from "@/components/ui/card";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/components/providers/settings-provider";
 
 function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;
@@ -13,6 +14,11 @@ function formatBytes(n: number) {
 
 export default function DashboardPage() {
   const { data, isLoading } = useDashboard();
+  const { formatEmission } = useSettings();
+
+  const formattedEmission = data?.avg_emission_tonnes_per_year != null
+    ? formatEmission(data.avg_emission_tonnes_per_year)
+    : { value: "—", unit: "t CO₂ / year" };
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -34,12 +40,8 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Avg predicted emissions"
-          value={
-            data?.avg_emission_tonnes_per_year != null
-              ? data.avg_emission_tonnes_per_year.toLocaleString()
-              : "—"
-          }
-          sublabel="t CO₂ / year"
+          value={formattedEmission.value}
+          sublabel={formattedEmission.unit}
           emission
           loading={isLoading}
         />

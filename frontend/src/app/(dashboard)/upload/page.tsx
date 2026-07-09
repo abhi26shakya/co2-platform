@@ -5,7 +5,8 @@ import { Dropzone } from "@/components/upload/dropzone";
 import { Card } from "@/components/ui/card";
 import { useUpload } from "@/hooks/use-upload";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Play } from "lucide-react";
+import Link from "next/link";
 
 function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;
@@ -117,16 +118,19 @@ export default function UploadPage() {
               </dl>
             </div>
 
-            <div className="mt-5 flex items-center gap-3">
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Link
+                href={`/processing?image_id=${state.image.id}`}
+                className="rounded-lg bg-sensor hover:bg-sensor/90 text-ground-950 px-5 py-2 text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Play className="h-4 w-4" /> Start AI Analysis
+              </Link>
               <button
                 onClick={reset}
-                className="rounded-lg border border-ground-700 bg-ground-800 px-4 py-2 text-sm transition-colors hover:border-ground-400"
+                className="rounded-lg border border-ground-700 bg-ground-900/60 px-4 py-2 text-sm transition-colors hover:border-ground-400 cursor-pointer"
               >
                 Upload another
               </button>
-              <span className="text-xs text-ground-400">
-                Run a prediction on this scene from the Datasets page.
-              </span>
             </div>
           </Card>
         )}

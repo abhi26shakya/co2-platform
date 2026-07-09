@@ -4,15 +4,7 @@ import "leaflet/dist/leaflet.css";
 
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
-
-/** Interpolate the plume gradient (amber -> magenta) by hotspot intensity.
- *  Reserved for emission data only, per the design system. */
-function plumeColor(t: number): string {
-  const a = { r: 0xf5, g: 0xa6, b: 0x23 };
-  const b = { r: 0xe6, g: 0x49, b: 0x80 };
-  const mix = (x: number, y: number) => Math.round(x + (y - x) * t);
-  return `rgb(${mix(a.r, b.r)}, ${mix(a.g, b.g)}, ${mix(a.b, b.b)})`;
-}
+import { useSettings } from "@/components/providers/settings-provider";
 
 interface Props {
   plants: PlantOut[];
@@ -22,6 +14,8 @@ interface Props {
 }
 
 export default function EmissionMap({ plants, hotspots, showPlants, showHotspots }: Props) {
+  const { formatEmission, getHotspotColor, resolvedTheme } = useSettings();
+
   // center on the user's data when it exists, otherwise on India
   const center: [number, number] =
     hotspots.length > 0
@@ -40,7 +34,10 @@ export default function EmissionMap({ plants, hotspots, showPlants, showHotspots
       scrollWheelZoom
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        url={resolvedTheme === "light"
+          ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        }
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
       />
 
@@ -69,29 +66,33 @@ export default function EmissionMap({ plants, hotspots, showPlants, showHotspots
         ))}
 
       {showHotspots &&
-        hotspots.map((h, i) => (
-          <CircleMarker
-            key={`${h.lat}-${h.lon}-${i}`}
-            center={[h.lat, h.lon]}
-            radius={6 + h.intensity * 10}
-            pathOptions={{
-              color: plumeColor(h.intensity),
-              weight: 1,
-              fillColor: plumeColor(h.intensity),
-              fillOpacity: 0.35 + h.intensity * 0.3,
-            }}
-          >
-            <Tooltip>
-              <div className="text-xs">
-                <p className="font-medium">Intensity {(h.intensity * 100).toFixed(0)}%</p>
-                <p>
-                  {h.emission_tonnes_per_year?.toLocaleString()} t CO₂/yr · {h.image_filename}
-                </p>
-                <p>{new Date(h.predicted_at).toLocaleDateString()}</p>
-              </div>
-            </Tooltip>
-          </CircleMarker>
-        ))}
+        hotspots.map((h, i) => {
+          const emissionInfo = formatEmission(h.emission_tonnes_per_year ?? 0);
+          const color = getHotspotColor(h.intensity);
+          return (
+            <CircleMarker
+              key={`${h.lat}-${h.lon}-${i}`}
+              center={[h.lat, h.lon]}
+              radius={6 + h.intensity * 10}
+              pathOptions={{
+                color: color,
+                weight: 1,
+                fillColor: color,
+                fillOpacity: 0.35 + h.intensity * 0.3,
+              }}
+            >
+              <Tooltip>
+                <div className="text-xs">
+                  <p className="font-medium">Intensity {(h.intensity * 100).toFixed(0)}%</p>
+                  <p>
+                    {emissionInfo.value} {emissionInfo.unit} · {h.image_filename}
+                  </p>
+                  <p>{new Date(h.predicted_at).toLocaleDateString()}</p>
+                </div>
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
     </MapContainer>
   );
 }

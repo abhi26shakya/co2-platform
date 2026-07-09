@@ -12,6 +12,8 @@ import {
   Map,
   Satellite,
   Upload,
+  Settings,
+  Share2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -24,6 +26,8 @@ const NAV = [
   { href: "/analytics", label: "Analytics", icon: BarChart3, ready: true },
   { href: "/reports", label: "Reports", icon: FileText, ready: true },
   { href: "/model", label: "Model", icon: Cpu, ready: true },
+  { href: "/shared-links", label: "Shared Links", icon: Share2, ready: true },
+  { href: "/settings", label: "Settings", icon: Settings, ready: true },
 ];
 
 export function Sidebar() {

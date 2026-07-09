@@ -2,22 +2,35 @@
 
 import { Card } from "@/components/ui/card";
 import { useCreateReport, useDeleteReport, useReports } from "@/hooks/use-reports";
-import { FileSpreadsheet, FileText, Trash2 } from "lucide-react";
+import { FileSpreadsheet, FileText, Trash2, Share2 } from "lucide-react";
+import { useState } from "react";
+import { ShareModal } from "@/components/share/share-modal";
 
 export default function ReportsPage() {
   const { data: reports, isLoading } = useReports();
   const create = useCreateReport();
   const del = useDeleteReport();
+  const [shareOpen, setShareOpen] = useState(false);
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-2xl font-medium" style={{ fontFamily: "var(--font-display)" }}>
-        Reports
-      </h1>
-      <p className="mt-1 text-sm text-ground-400">
-        Generate shareable snapshots of your predictions — a PDF with charts and
-        summary tables, or the raw data as CSV.
-      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-medium" style={{ fontFamily: "var(--font-display)" }}>
+            Reports
+          </h1>
+          <p className="mt-1 text-sm text-ground-400">
+            Generate shareable snapshots of your predictions — a PDF with charts and
+            summary tables, or the raw data as CSV.
+          </p>
+        </div>
+        <button
+          onClick={() => setShareOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-sensor text-ground-950 px-4 py-2 text-sm font-medium transition-colors hover:bg-sensor/90 cursor-pointer shrink-0"
+        >
+          <Share2 className="h-4 w-4" /> Share
+        </button>
+      </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button
@@ -90,6 +103,21 @@ export default function ReportsPage() {
           </ul>
         )}
       </Card>
+
+      <ShareModal
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        resourceType="report"
+        resourceId="recent-reports"
+        title="Industrial CO₂ Emission Reports Bundle"
+        metadata={{
+          filename: "emissia_report_active.pdf",
+          satellite: "Sentinel-5P / OCO-2",
+          resolution: "10m",
+          size: "1.8 MB",
+          bands: "13 channels",
+        }}
+      />
     </div>
   );
 }
