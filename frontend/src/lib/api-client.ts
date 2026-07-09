@@ -38,6 +38,33 @@ async function tryRefresh(): Promise<boolean> {
   return refreshInFlight;
 }
 
+interface MockUser {
+  email: string;
+  password?: string;
+  full_name: string;
+}
+
+const DEFAULT_USERS: MockUser[] = [
+  { email: "demo@emissia.dev", password: "demopass123", full_name: "Demo Researcher" }
+];
+
+function getMockUsers(): MockUser[] {
+  if (typeof window === "undefined") return DEFAULT_USERS;
+  try {
+    const raw = localStorage.getItem("mock_db_users");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return DEFAULT_USERS;
+}
+
+function saveMockUser(user: MockUser) {
+  if (typeof window === "undefined") return;
+  const users = getMockUsers();
+  const filtered = users.filter(u => u.email.toLowerCase() !== user.email.toLowerCase());
+  filtered.push(user);
+  localStorage.setItem("mock_db_users", JSON.stringify(filtered));
+}
+
 function getMockData<T>(path: string, init?: RequestInit): T | null {
   const cleanPath = path.split("?")[0];
   
@@ -50,27 +77,26 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
   }
 
   if (cleanPath === "/auth/login") {
-    let email = "demo@emissia.dev";
-    let full_name = "";
+    let email = "";
+    let password = "";
     try {
       if (init?.body) {
         const body = JSON.parse(init.body as string);
-        if (body.email) email = body.email;
+        email = String(body.email || "").trim().toLowerCase();
+        password = String(body.password || "");
       }
     } catch {}
 
-    if (typeof window !== "undefined") {
-      const existingEmail = localStorage.getItem("mock_user_email");
-      const existingName = localStorage.getItem("mock_user_name");
+    const users = getMockUsers();
+    const user = users.find(u => u.email.toLowerCase() === email);
 
-      if (existingEmail === email && existingName) {
-        full_name = existingName;
-      } else {
-        const parts = email.split("@")[0].split(/[._-]/);
-        full_name = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
-        localStorage.setItem("mock_user_name", full_name);
-      }
-      localStorage.setItem("mock_user_email", email);
+    if (!user || user.password !== password) {
+      throw new ApiError(401, "Incorrect email or password.");
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mock_user_email", user.email);
+      localStorage.setItem("mock_user_name", user.full_name);
     }
 
     return {
@@ -84,12 +110,28 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
     try {
       if (init?.body) {
         const body = JSON.parse(init.body as string);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("mock_user_email", body.email || "demo@emissia.dev");
-          localStorage.setItem("mock_user_name", body.full_name || "Demo Researcher");
+        const email = String(body.email || "").trim().toLowerCase();
+
+        const users = getMockUsers();
+        if (users.some(u => u.email.toLowerCase() === email)) {
+          throw new ApiError(409, "That email is already registered.");
+        }
+
+        if (body.email && body.password && body.full_name) {
+          saveMockUser({
+            email,
+            password: body.password,
+            full_name: body.full_name.trim()
+          });
+          if (typeof window !== "undefined") {
+            localStorage.setItem("mock_user_email", email);
+            localStorage.setItem("mock_user_name", body.full_name.trim());
+          }
         }
       }
-    } catch {}
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+    }
     return {
       message: "Signup successful"
     } as unknown as T;
