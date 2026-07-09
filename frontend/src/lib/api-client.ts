@@ -234,7 +234,7 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
       {
         lat: 24.0983,
         lon: 82.6714,
-        intensity: 4760,
+        intensity: 0.85,
         radius_m: 250,
         emission_tonnes_per_year: 4760,
         image_filename: "vindhyachal.tif",
@@ -243,7 +243,7 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
       {
         lat: 23.9782,
         lon: 82.6289,
-        intensity: 3960,
+        intensity: 0.65,
         radius_m: 200,
         emission_tonnes_per_year: 3960,
         image_filename: "sasan.tif",
@@ -325,7 +325,7 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
       co2_emission_tonnes_per_year: imageId === "img-2" ? 3960 : 4760,
       confidence: 94.5,
       hotspots: [
-        { lat: imageId === "img-2" ? 23.9782 : 24.0983, lon: imageId === "img-2" ? 82.6289 : 82.6714, intensity: imageId === "img-2" ? 3960 : 4760, radius_m: 250 }
+        { lat: imageId === "img-2" ? 23.9782 : 24.0983, lon: imageId === "img-2" ? 82.6289 : 82.6714, intensity: imageId === "img-2" ? 0.65 : 0.85, radius_m: 250 }
       ],
       inference_time_ms: 320,
       created_at: new Date().toISOString(),
