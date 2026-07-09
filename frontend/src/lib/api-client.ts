@@ -50,6 +50,23 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
   }
 
   if (cleanPath === "/auth/login") {
+    let email = "demo@emissia.dev";
+    let full_name = "Demo Researcher";
+    try {
+      if (init?.body) {
+        const body = JSON.parse(init.body as string);
+        if (body.email) email = body.email;
+        // Derive name from email if no name exists
+        const parts = email.split("@")[0].split(/[._-]/);
+        full_name = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+      }
+    } catch {}
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mock_user_email", email);
+      localStorage.setItem("mock_user_name", full_name);
+    }
+
     return {
       access_token: "mock-access-token",
       refresh_token: "mock-refresh-token",
@@ -58,29 +75,56 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
   }
 
   if (cleanPath === "/auth/signup") {
+    try {
+      if (init?.body) {
+        const body = JSON.parse(init.body as string);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("mock_user_email", body.email || "demo@emissia.dev");
+          localStorage.setItem("mock_user_name", body.full_name || "Demo Researcher");
+        }
+      }
+    } catch {}
     return {
       message: "Signup successful"
     } as unknown as T;
   }
 
   if (cleanPath === "/auth/logout") {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mock_user_email");
+      localStorage.removeItem("mock_user_name");
+    }
     return {
       message: "Logged out"
     } as unknown as T;
   }
 
   if (cleanPath === "/auth/me") {
+    let email = "demo@emissia.dev";
     let full_name = "Demo Researcher";
-    try {
-      if (init?.body) {
-        const body = JSON.parse(init.body as string);
-        if (body.full_name) full_name = body.full_name;
-      }
-    } catch {}
-    
+
+    if (typeof window !== "undefined") {
+      email = localStorage.getItem("mock_user_email") || email;
+      full_name = localStorage.getItem("mock_user_name") || full_name;
+    }
+
+    if (init?.method === "PATCH") {
+      try {
+        if (init.body) {
+          const body = JSON.parse(init.body as string);
+          if (body.full_name) {
+            full_name = body.full_name;
+            if (typeof window !== "undefined") {
+              localStorage.setItem("mock_user_name", full_name);
+            }
+          }
+        }
+      } catch {}
+    }
+
     return {
       id: "mock-user-id",
-      email: "demo@emissia.dev",
+      email: email,
       full_name: full_name
     } as unknown as T;
   }
