@@ -51,20 +51,26 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
 
   if (cleanPath === "/auth/login") {
     let email = "demo@emissia.dev";
-    let full_name = "Demo Researcher";
+    let full_name = "";
     try {
       if (init?.body) {
         const body = JSON.parse(init.body as string);
         if (body.email) email = body.email;
-        // Derive name from email if no name exists
-        const parts = email.split("@")[0].split(/[._-]/);
-        full_name = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
       }
     } catch {}
 
     if (typeof window !== "undefined") {
+      const existingEmail = localStorage.getItem("mock_user_email");
+      const existingName = localStorage.getItem("mock_user_name");
+
+      if (existingEmail === email && existingName) {
+        full_name = existingName;
+      } else {
+        const parts = email.split("@")[0].split(/[._-]/);
+        full_name = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+        localStorage.setItem("mock_user_name", full_name);
+      }
       localStorage.setItem("mock_user_email", email);
-      localStorage.setItem("mock_user_name", full_name);
     }
 
     return {

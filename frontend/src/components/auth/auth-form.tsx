@@ -16,8 +16,46 @@ interface Props {
 
 export function AuthForm({ mode, pending, error, onSubmit }: Props) {
   const [values, setValues] = useState({ email: "", password: "", full_name: "" });
-  const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValidationError(null);
     setValues((v) => ({ ...v, [k]: e.target.value }));
+  };
+
+  const handleSubmit = () => {
+    setValidationError(null);
+    const emailTrimmed = values.email.trim();
+    const passwordTrimmed = values.password.trim();
+    const nameTrimmed = values.full_name.trim();
+
+    if (mode === "signup" && !nameTrimmed) {
+      setValidationError("Full name is required.");
+      return;
+    }
+    if (!emailTrimmed) {
+      setValidationError("Email address is required.");
+      return;
+    }
+    if (!emailTrimmed.includes("@")) {
+      setValidationError("Please enter a valid email address.");
+      return;
+    }
+    if (!passwordTrimmed) {
+      setValidationError("Password is required.");
+      return;
+    }
+    if (passwordTrimmed.length < 8) {
+      setValidationError("Password must be at least 8 characters.");
+      return;
+    }
+
+    onSubmit({
+      email: emailTrimmed,
+      password: passwordTrimmed,
+      full_name: nameTrimmed,
+    });
+  };
 
   const message =
     error instanceof ApiError && error.status === 401
@@ -27,6 +65,8 @@ export function AuthForm({ mode, pending, error, onSubmit }: Props) {
         : error
           ? "Something went wrong. Try again."
           : null;
+
+  const displayError = validationError || message;
 
   return (
     <div className="w-full max-w-sm">
@@ -70,16 +110,16 @@ export function AuthForm({ mode, pending, error, onSubmit }: Props) {
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             value={values.password}
             onChange={set("password")}
-            onKeyDown={(e) => e.key === "Enter" && onSubmit(values)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           />
           {mode === "signup" && (
             <p className="mt-1 text-xs text-ground-400">At least 8 characters.</p>
           )}
         </div>
 
-        {message && <p className="text-sm text-alert">{message}</p>}
+        {displayError && <p className="text-sm text-alert">{displayError}</p>}
 
-        <Button className="w-full" disabled={pending} onClick={() => onSubmit(values)}>
+        <Button className="w-full" disabled={pending} onClick={handleSubmit}>
           {pending ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </Button>
       </div>
