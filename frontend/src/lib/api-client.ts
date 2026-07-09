@@ -41,73 +41,273 @@ async function tryRefresh(): Promise<boolean> {
 function getMockData<T>(path: string, init?: RequestInit): T | null {
   const cleanPath = path.split("?")[0];
   
-  if (cleanPath === "/auth/login") {
-    const body = init?.body ? JSON.parse(init.body as string) : {};
-    if (body.email === "demo@emissia.dev" && body.password === "demopass123") {
-      return {
-        access_token: "mock-access-token",
-        refresh_token: "mock-refresh-token",
-        token_type: "bearer"
-      } as unknown as T;
-    }
-    return null;
+  if (init?.method === "DELETE") {
+    return undefined as unknown as T;
   }
+
+  if (cleanPath === "/system/status") {
+    return { api: "ok", ml_service: "ok" } as unknown as T;
+  }
+
+  if (cleanPath === "/auth/login") {
+    return {
+      access_token: "mock-access-token",
+      refresh_token: "mock-refresh-token",
+      token_type: "bearer"
+    } as unknown as T;
+  }
+
+  if (cleanPath === "/auth/signup") {
+    return {
+      message: "Signup successful"
+    } as unknown as T;
+  }
+
+  if (cleanPath === "/auth/logout") {
+    return {
+      message: "Logged out"
+    } as unknown as T;
+  }
+
   if (cleanPath === "/auth/me") {
+    let full_name = "Demo Researcher";
+    try {
+      if (init?.body) {
+        const body = JSON.parse(init.body as string);
+        if (body.full_name) full_name = body.full_name;
+      }
+    } catch {}
+    
     return {
       id: "mock-user-id",
       email: "demo@emissia.dev",
-      full_name: "Demo Researcher"
+      full_name: full_name
     } as unknown as T;
   }
+
   if (cleanPath === "/dashboard") {
     return {
-      prediction_count: 5,
-      total_co2_tonnes: 12450,
-      average_confidence: 93,
-      recent_activity: []
+      processed_images: 2,
+      total_predictions: 2,
+      avg_emission_tonnes_per_year: 4360,
+      avg_confidence: 94.5,
+      recent_uploads: [
+        {
+          id: "img-1",
+          filename: "vindhyachal.tif",
+          source: "Sentinel-5P",
+          content_type: "image/tiff",
+          size_bytes: 1850000,
+          created_at: "2026-07-09T10:00:00Z"
+        },
+        {
+          id: "img-2",
+          filename: "sasan.tif",
+          source: "Sentinel-5P",
+          content_type: "image/tiff",
+          size_bytes: 2100000,
+          created_at: "2026-07-09T11:00:00Z"
+        }
+      ],
+      active_model_version: "v1.2.0",
+      ml_service_status: "ok"
     } as unknown as T;
   }
-  if (cleanPath === "/map/hotspots") {
-    return [
-      { lat: 24.0983, lon: 82.6714, intensity: 4760, radius_m: 100, emission_tonnes_per_year: 4760, image_filename: "vindhyachal.tif", predicted_at: new Date().toISOString() }
-    ] as unknown as T;
-  }
+
   if (cleanPath === "/map/plants") {
     return [
-      { id: "1", name: "Vindhyachal Super Thermal Power Station", country: "India", fuel_type: "Coal", capacity_mw: 4760, lat: 24.0983, lon: 82.6714 }
+      {
+        id: "plant-1",
+        name: "Vindhyachal Super Thermal Power Station",
+        country: "India",
+        fuel_type: "Coal",
+        capacity_mw: 4760,
+        lat: 24.0983,
+        lon: 82.6714
+      },
+      {
+        id: "plant-2",
+        name: "Sasan Ultra Mega Power Project",
+        country: "India",
+        fuel_type: "Coal",
+        capacity_mw: 3960,
+        lat: 23.9782,
+        lon: 82.6289
+      }
     ] as unknown as T;
   }
+
+  if (cleanPath === "/map/hotspots") {
+    return [
+      {
+        lat: 24.0983,
+        lon: 82.6714,
+        intensity: 4760,
+        radius_m: 250,
+        emission_tonnes_per_year: 4760,
+        image_filename: "vindhyachal.tif",
+        predicted_at: "2026-07-09T10:00:00Z"
+      },
+      {
+        lat: 23.9782,
+        lon: 82.6289,
+        intensity: 3960,
+        radius_m: 200,
+        emission_tonnes_per_year: 3960,
+        image_filename: "sasan.tif",
+        predicted_at: "2026-07-09T11:00:00Z"
+      }
+    ] as unknown as T;
+  }
+
   if (cleanPath === "/images") {
     return {
       items: [
-        { id: "img-1", filename: "vindhyachal.tif", size_bytes: 1800000, crs: "EPSG:4326", width: 1024, height: 1024, source: "Sentinel-5P", created_at: new Date().toISOString(), url: "", preview_url: "/profile_pic.jpg" }
+        {
+          id: "img-1",
+          filename: "vindhyachal.tif",
+          content_type: "image/tiff",
+          size_bytes: 1850000,
+          width: 1024,
+          height: 1024,
+          bounds: [82.5, 23.9, 82.8, 24.2],
+          crs: "EPSG:4326",
+          source: "Sentinel-5P",
+          plant_id: "plant-1",
+          meta: {},
+          created_at: "2026-07-09T10:00:00Z",
+          url: null,
+          preview_url: "/profile_pic.jpg"
+        },
+        {
+          id: "img-2",
+          filename: "sasan.tif",
+          content_type: "image/tiff",
+          size_bytes: 2100000,
+          width: 1024,
+          height: 1024,
+          bounds: [82.4, 23.8, 82.7, 24.1],
+          crs: "EPSG:4326",
+          source: "Sentinel-5P",
+          plant_id: "plant-2",
+          meta: {},
+          created_at: "2026-07-09T11:00:00Z",
+          url: null,
+          preview_url: "/profile_pic.jpg"
+        }
       ],
-      total: 1,
+      total: 2,
       page: 1,
-      pages: 1
+      page_size: 10
     } as unknown as T;
   }
+
+  if (cleanPath.startsWith("/images/")) {
+    const id = cleanPath.split("/")[2];
+    return {
+      id: id || "img-1",
+      filename: id === "img-2" ? "sasan.tif" : "vindhyachal.tif",
+      content_type: "image/tiff",
+      size_bytes: id === "img-2" ? 2100000 : 1850000,
+      width: 1024,
+      height: 1024,
+      bounds: id === "img-2" ? [82.4, 23.8, 82.7, 24.1] : [82.5, 23.9, 82.8, 24.2],
+      crs: "EPSG:4326",
+      source: "Sentinel-5P",
+      plant_id: id === "img-2" ? "plant-2" : "plant-1",
+      meta: {},
+      created_at: new Date().toISOString(),
+      url: null,
+      preview_url: "/profile_pic.jpg"
+    } as unknown as T;
+  }
+
+  if (cleanPath === "/predictions") {
+    const body = init?.body ? JSON.parse(init.body as string) : {};
+    const imageId = body.image_id || "img-1";
+    return {
+      id: "pred-mock-" + Math.random().toString(36).substring(7),
+      image_id: imageId,
+      status: "completed",
+      schema_version: "v1",
+      co2_emission_tonnes_per_year: imageId === "img-2" ? 3960 : 4760,
+      confidence: 94.5,
+      hotspots: [
+        { lat: imageId === "img-2" ? 23.9782 : 24.0983, lon: imageId === "img-2" ? 82.6289 : 82.6714, intensity: imageId === "img-2" ? 3960 : 4760, radius_m: 250 }
+      ],
+      inference_time_ms: 320,
+      created_at: new Date().toISOString(),
+      model_version: "v1.2.0",
+      image_filename: imageId === "img-2" ? "sasan.tif" : "vindhyachal.tif"
+    } as unknown as T;
+  }
+
   if (cleanPath === "/analytics") {
     return {
       timeseries: [
-        { month: "Jan", avg_emission: 2400, total_emission: 2400, prediction_count: 1 },
-        { month: "Feb", avg_emission: 2800, total_emission: 2800, prediction_count: 1 },
-        { month: "Mar", avg_emission: 3200, total_emission: 3200, prediction_count: 1 }
+        { month: "Jan", avg_emission: 3100, total_emission: 3100, prediction_count: 1 },
+        { month: "Feb", avg_emission: 3300, total_emission: 3300, prediction_count: 1 },
+        { month: "Mar", avg_emission: 3500, total_emission: 3500, prediction_count: 1 },
+        { month: "Apr", avg_emission: 3800, total_emission: 3800, prediction_count: 1 }
       ],
       distribution: [
-        { lo: 1000, hi: 2000, count: 2 },
-        { lo: 2000, hi: 3000, count: 5 },
-        { lo: 3000, hi: 4000, count: 3 }
+        { lo: 1000, hi: 2000, count: 0 },
+        { lo: 2000, hi: 3000, count: 1 },
+        { lo: 3000, hi: 4000, count: 3 },
+        { lo: 4000, hi: 5000, count: 2 }
       ],
-      sources: [{ source: "Sentinel-5P", count: 10 }],
-      total_predictions: 10,
+      sources: [
+        { source: "Sentinel-5P", count: 4 },
+        { source: "Landsat-8", count: 2 }
+      ],
+      total_predictions: 6,
       max_emission: 4760,
-      avg_confidence: 93
+      avg_confidence: 92.4
     } as unknown as T;
   }
-  if (cleanPath === "/reports") {
-    return [] as unknown as T;
+
+  if (cleanPath === "/models") {
+    return [
+      {
+        id: "model-1",
+        name: "Emissia-Net CO2 Estimator",
+        version: "v1.2.0",
+        architecture: "U-Net ResNet50 Backbone",
+        accuracy: 0.945,
+        precision_score: 0.932,
+        recall: 0.928,
+        f1_score: 0.930,
+        is_active: true,
+        trained_at: "2026-06-15T08:00:00Z",
+        created_at: "2026-06-15T08:00:00Z"
+      }
+    ] as unknown as T;
   }
+
+  if (cleanPath === "/reports") {
+    if (init?.method === "POST") {
+      const body = init.body ? JSON.parse(init.body as string) : {};
+      return {
+        id: "report-mock-" + Math.random().toString(36).substring(7),
+        title: `CO2 Emissions Report (${body.format?.toUpperCase() || "PDF"})`,
+        format: body.format || "pdf",
+        params: {},
+        created_at: new Date().toISOString(),
+        url: "/profile_pic.jpg"
+      } as unknown as T;
+    }
+    return [
+      {
+        id: "report-1",
+        title: "Quarterly Emission Report Q2 2026",
+        format: "pdf",
+        params: {},
+        created_at: "2026-07-01T12:00:00Z",
+        url: "/profile_pic.jpg"
+      }
+    ] as unknown as T;
+  }
+
   return null;
 }
 
