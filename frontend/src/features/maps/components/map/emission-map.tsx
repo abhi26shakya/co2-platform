@@ -19,6 +19,9 @@ interface Props {
   comparisonMode?: boolean;
   timelineDate?: string;
   showLayers?: Record<string, boolean>;
+  onDrawingComplete?: (draw: any) => void;
+  onLiveMeasurement?: (text: string | null) => void;
+  clearTrigger?: number;
 }
 
 interface PlumePoint {
@@ -127,6 +130,9 @@ export default function EmissionMap({
   comparisonMode = false,
   timelineDate = "",
   showLayers = { plants: true, heatmap: true },
+  onDrawingComplete = () => {},
+  onLiveMeasurement = () => {},
+  clearTrigger = 0,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -535,74 +541,331 @@ export default function EmissionMap({
     }
   }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases]);
 
+  // Listen to clearTrigger to remove custom drawn entities
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const toRemove: any[] = [];
+    viewer.entities.values.forEach((ent: any) => {
+      if (ent.id && ent.id.toString().startsWith("gis-draw-")) {
+        toRemove.push(ent);
+      }
+    });
+    toRemove.forEach((ent) => viewer.entities.remove(ent));
+  }, [clearTrigger]);
+
   // Handle Drawings / Polygon Measure tools
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || drawingMode === "none") return;
 
     const Cesium = (window as any).Cesium;
-    const activePoints: any[] = [];
+    let activePoints: any[] = [];
     const entityCollection: any[] = [];
+    let isDrawing = false;
+    let anchorPoint: any = null;
 
     const drawHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 
+    const getCartographicCoords = (cartesian: any) => {
+      const carto = Cesium.Cartographic.fromCartesian(cartesian);
+      return {
+        lat: Cesium.Math.toDegrees(carto.latitude),
+        lon: Cesium.Math.toDegrees(carto.longitude),
+      };
+    };
+
+    const calculatePolygonArea = (coordsList: { lat: number; lon: number }[]) => {
+      if (coordsList.length < 3) return 0;
+      const r = 6378137;
+      let area = 0;
+      const len = coordsList.length;
+      const x = coordsList.map(c => (c.lon - coordsList[0].lon) * Math.PI / 180 * r * Math.cos(coordsList[0].lat * Math.PI / 180));
+      const y = coordsList.map(c => (c.lat - coordsList[0].lat) * Math.PI / 180 * r);
+      for (let i = 0; i < len; i++) {
+        const next = (i + 1) % len;
+        area += x[i] * y[next] - x[next] * y[i];
+      }
+      return Math.abs(area / 2.0);
+    };
+
+    // 1. LEFT CLICK HANDLER
     drawHandler.setInputAction((click: any) => {
       const cartesian = viewer.scene.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
-      if (cartesian) {
-        activePoints.push(cartesian);
+      if (!cartesian) return;
 
-        const pt = viewer.entities.add({
+      const uuid = Math.random().toString(36).substring(2, 9);
+      const coords = getCartographicCoords(cartesian);
+
+      if (drawingMode === "picker") {
+        viewer.entities.add({
+          id: `gis-draw-marker-${uuid}`,
           position: cartesian,
           point: {
-            pixelSize: 6,
-            color: Cesium.Color.RED,
+            pixelSize: 12,
+            color: Cesium.Color.fromCssColorString("#10b981"),
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           },
         });
-        entityCollection.push(pt);
+        const measureText = `Coords: ${coords.lat.toFixed(4)}°, ${coords.lon.toFixed(4)}°`;
+        onDrawingComplete({
+          id: `marker-${uuid}`,
+          type: "marker",
+          measurement: measureText,
+          geojson: {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [coords.lon, coords.lat] },
+            properties: { type: "picker", coords: measureText },
+          },
+        });
+        return;
+      }
 
-        if (activePoints.length > 1) {
-          const line = viewer.entities.add({
-            polyline: {
-              positions: activePoints,
-              width: 2.5,
-              material: Cesium.Color.RED,
-            },
+      if (drawingMode === "rectangle" || drawingMode === "circle") {
+        if (!isDrawing) {
+          isDrawing = true;
+          anchorPoint = cartesian;
+          const pt = viewer.entities.add({
+            id: `gis-draw-pt-${uuid}`,
+            position: cartesian,
+            point: { pixelSize: 8, color: Cesium.Color.RED },
           });
-          entityCollection.push(line);
-        }
+          entityCollection.push(pt);
+        } else {
+          isDrawing = false;
+          const endPoint = cartesian;
+          const startCoords = getCartographicCoords(anchorPoint);
+          const endCoords = getCartographicCoords(endPoint);
 
-        if (drawingMode === "distance" && activePoints.length > 1) {
-          let dist = 0;
-          for (let i = 0; i < activePoints.length - 1; i++) {
-            dist += Cesium.Cartesian3.distance(activePoints[i], activePoints[i + 1]);
+          if (drawingMode === "rectangle") {
+            const west = Math.min(startCoords.lon, endCoords.lon);
+            const east = Math.max(startCoords.lon, endCoords.lon);
+            const south = Math.min(startCoords.lat, endCoords.lat);
+            const north = Math.max(startCoords.lat, endCoords.lat);
+
+            viewer.entities.add({
+              id: `gis-draw-rect-${uuid}`,
+              rectangle: {
+                coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
+                material: Cesium.Color.RED.withAlpha(0.2),
+                outline: true,
+                outlineColor: Cesium.Color.RED,
+                outlineWidth: 2,
+              },
+            });
+
+            const r = 6378137;
+            const wMeters = (east - west) * Math.PI / 180 * r * Math.cos(((south + north) / 2) * Math.PI / 180);
+            const hMeters = (north - south) * Math.PI / 180 * r;
+            const finalArea = Math.abs(wMeters * hMeters) / 1000000;
+            const measureText = `Area: ${finalArea.toFixed(2)} km²`;
+
+            onDrawingComplete({
+              id: `rectangle-${uuid}`,
+              type: "rectangle",
+              measurement: measureText,
+              geojson: {
+                type: "Feature",
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [[
+                    [west, south],
+                    [east, south],
+                    [east, north],
+                    [west, north],
+                    [west, south]
+                  ]],
+                },
+                properties: { type: "rectangle", measurement: measureText, area_km2: finalArea },
+              },
+            });
+          } else {
+            const radiusM = Cesium.Cartesian3.distance(anchorPoint, endPoint);
+            viewer.entities.add({
+              id: `gis-draw-circle-${uuid}`,
+              position: anchorPoint,
+              ellipse: {
+                semiMajorAxis: radiusM,
+                semiMinorAxis: radiusM,
+                material: Cesium.Color.RED.withAlpha(0.2),
+                outline: true,
+                outlineColor: Cesium.Color.RED,
+                outlineWidth: 2,
+              },
+            });
+
+            const finalArea = (Math.PI * radiusM * radiusM) / 1000000;
+            const measureText = `Area: ${finalArea.toFixed(2)} km² (Rad: ${(radiusM / 1000).toFixed(2)} km)`;
+
+            onDrawingComplete({
+              id: `circle-${uuid}`,
+              type: "circle",
+              measurement: measureText,
+              geojson: {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [startCoords.lon, startCoords.lat] },
+                properties: { type: "circle", radius_meters: radiusM, measurement: measureText },
+              },
+            });
           }
-          setMeasurementResult(`Distance: ${(dist / 1000).toFixed(2)} km`);
         }
+        return;
+      }
 
-        if (drawingMode === "polygon" && activePoints.length >= 3) {
-          const poly = viewer.entities.add({
-            polygon: {
-              hierarchy: activePoints,
-              material: Cesium.Color.RED.withAlpha(0.2),
-              outline: true,
-              outlineColor: Cesium.Color.RED,
-            },
-          });
-          entityCollection.push(poly);
-        }
+      activePoints.push(cartesian);
+
+      const pt = viewer.entities.add({
+        id: `gis-draw-pt-${uuid}`,
+        position: cartesian,
+        point: { pixelSize: 6, color: Cesium.Color.RED },
+      });
+      entityCollection.push(pt);
+
+      if (activePoints.length > 1) {
+        const line = viewer.entities.add({
+          id: `gis-draw-line-${uuid}`,
+          polyline: {
+            positions: activePoints,
+            width: 2.5,
+            material: Cesium.Color.RED,
+          },
+        });
+        entityCollection.push(line);
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+    // 2. MOUSE MOVE HANDLER FOR PREVIEWS & LIVE MEASUREMENTS
+    drawHandler.setInputAction((movement: any) => {
+      const cartesian = viewer.scene.camera.pickEllipsoid(movement.endPosition, viewer.scene.globe.ellipsoid);
+      if (!cartesian) return;
+
+      const coords = getCartographicCoords(cartesian);
+
+      if (drawingMode === "picker") {
+        onLiveMeasurement(`Coords Picker: ${coords.lat.toFixed(4)}°, ${coords.lon.toFixed(4)}°`);
+        return;
+      }
+
+      if (drawingMode === "rectangle" && isDrawing && anchorPoint) {
+        const startCoords = getCartographicCoords(anchorPoint);
+        const west = Math.min(startCoords.lon, coords.lon);
+        const east = Math.max(startCoords.lon, coords.lon);
+        const south = Math.min(startCoords.lat, coords.lat);
+        const north = Math.max(startCoords.lat, coords.lat);
+
+        const r = 6378137;
+        const wMeters = (east - west) * Math.PI / 180 * r * Math.cos(((south + north) / 2) * Math.PI / 180);
+        const hMeters = (north - south) * Math.PI / 180 * r;
+        const tempArea = Math.abs(wMeters * hMeters) / 1000000;
+        onLiveMeasurement(`Rectangle Area: ${tempArea.toFixed(2)} km²`);
+        return;
+      }
+
+      if (drawingMode === "circle" && isDrawing && anchorPoint) {
+        const radiusM = Cesium.Cartesian3.distance(anchorPoint, cartesian);
+        const tempArea = (Math.PI * radiusM * radiusM) / 1000000;
+        onLiveMeasurement(`Circle Area: ${tempArea.toFixed(2)} km² (Rad: ${(radiusM / 1000).toFixed(2)} km)`);
+        return;
+      }
+
+      if (activePoints.length > 0) {
+        const tempPoints = [...activePoints, cartesian];
+        const tempCoordsList = tempPoints.map(p => getCartographicCoords(p));
+
+        if (drawingMode === "polyline" || drawingMode === "distance") {
+          let dist = 0;
+          for (let i = 0; i < tempPoints.length - 1; i++) {
+            dist += Cesium.Cartesian3.distance(tempPoints[i], tempPoints[i + 1]);
+          }
+          onLiveMeasurement(`Distance: ${(dist / 1000).toFixed(2)} km`);
+        } else if (drawingMode === "polygon" || drawingMode === "area") {
+          const areaM2 = calculatePolygonArea(tempCoordsList);
+          onLiveMeasurement(`Area: ${(areaM2 / 1000000).toFixed(2)} km²`);
+        }
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // 3. DOUBLE CLICK HANDLER TO COMPLETE
     drawHandler.setInputAction(() => {
+      if (activePoints.length < 2) return;
+
+      const uuid = Math.random().toString(36).substring(2, 9);
+      const coordsList = activePoints.map(p => getCartographicCoords(p));
+
+      if (drawingMode === "polyline" || drawingMode === "distance") {
+        viewer.entities.add({
+          id: `gis-draw-polyline-${uuid}`,
+          polyline: {
+            positions: activePoints,
+            width: 3.0,
+            material: Cesium.Color.RED,
+          },
+        });
+
+        let dist = 0;
+        for (let i = 0; i < activePoints.length - 1; i++) {
+          dist += Cesium.Cartesian3.distance(activePoints[i], activePoints[i + 1]);
+        }
+        const measureText = `Distance: ${(dist / 1000).toFixed(2)} km`;
+
+        onDrawingComplete({
+          id: `polyline-${uuid}`,
+          type: drawingMode,
+          measurement: measureText,
+          geojson: {
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: coordsList.map(c => [c.lon, c.lat]),
+            },
+            properties: { type: drawingMode, measurement: measureText, length_km: dist / 1000 },
+          },
+        });
+      } else if (drawingMode === "polygon" || drawingMode === "area") {
+        viewer.entities.add({
+          id: `gis-draw-polygon-${uuid}`,
+          polygon: {
+            hierarchy: activePoints,
+            material: Cesium.Color.RED.withAlpha(0.2),
+            outline: true,
+            outlineColor: Cesium.Color.RED,
+            outlineWidth: 2,
+          },
+        });
+
+        const areaM2 = calculatePolygonArea(coordsList);
+        const measureText = `Area: ${(areaM2 / 1000000).toFixed(2)} km²`;
+        const closedCoords = coordsList.map(c => [c.lon, c.lat]);
+        if (closedCoords.length > 0) {
+          closedCoords.push([coordsList[0].lon, coordsList[0].lat]);
+        }
+
+        onDrawingComplete({
+          id: `polygon-${uuid}`,
+          type: drawingMode,
+          measurement: measureText,
+          geojson: {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [closedCoords],
+            },
+            properties: { type: drawingMode, measurement: measureText, area_km2: areaM2 / 1000000 },
+          },
+        });
+      }
+
       drawHandler.destroy();
     }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
     return () => {
       drawHandler.destroy();
       entityCollection.forEach((ent) => viewer.entities.remove(ent));
-      setMeasurementResult(null);
+      onLiveMeasurement(null);
     };
-  }, [drawingMode]);
+  }, [drawingMode, clearTrigger, onDrawingComplete, onLiveMeasurement]);
 
   const handleZoom = (zoomIn: boolean) => {
     const viewer = viewerRef.current;
