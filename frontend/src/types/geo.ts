@@ -8,6 +8,12 @@ export interface PlantOut {
   capacity_mw: number | null;
   lat: number;
   lon: number;
+  // --- CO2 enhancement results ---
+  co2_enhancement_ppm?: number | null;
+  co2_bg_std_ppm?: number | null;
+  co2_no2_peak_km?: number | null;
+  co2_soundings?: number | null;
+  co2_wind_diff_deg?: number | null;
 }
 
 export interface MapHotspot {

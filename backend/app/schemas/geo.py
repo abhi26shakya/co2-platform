@@ -16,6 +16,13 @@ class PlantOut(BaseModel):
     lat: float
     lon: float
 
+    # --- CO2 enhancement results (populated by scripts/load_co2.py) ---
+    co2_enhancement_ppm: float | None = None
+    co2_bg_std_ppm: float | None = None
+    co2_no2_peak_km: float | None = None
+    co2_soundings: int | None = None
+    co2_wind_diff_deg: float | None = None
+
 
 class MapHotspot(BaseModel):
     lat: float
