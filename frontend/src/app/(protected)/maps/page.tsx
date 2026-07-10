@@ -128,6 +128,8 @@ export default function MapPage() {
   const [comparisonMode, setComparisonMode] = useState(false);
   const [comparePredictionA, setComparePredictionA] = useState("pred-1");
   const [comparePredictionB, setComparePredictionB] = useState("pred-2");
+  const [comparisonType, setComparisonType] = useState<"split-screen" | "before-after" | "gas-compare" | "time-compare" | "difference-layer" | "confidence-layer">("split-screen");
+  const [cameraTarget, setCameraTarget] = useState<{ lat: number; lon: number } | null>(null);
 
   // Export & History states
   const [exportHistory, setExportHistory] = useState<{ id: string; format: string; time: string; status: string }[]>([]);
@@ -681,6 +683,82 @@ export default function MapPage() {
               <span>GIS layers pre-allocated for boundary clipping in backend spatial databases.</span>
             </div>
           </Card>
+
+          {/* Real-Time Alerts & Notification Log */}
+          <Card className="p-4 bg-ground-900/40 border-ground-700/80 space-y-3">
+            <div className="flex items-center justify-between border-b border-ground-800 pb-1.5">
+              <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" /> Real-Time Alerts
+              </h3>
+              <span className="text-[8px] bg-red-500/10 border border-red-500/30 text-red-400 px-1 py-0.5 rounded font-mono animate-pulse">
+                Live Monitoring
+              </span>
+            </div>
+            
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {[
+                {
+                  id: "alert-1",
+                  facility: "Vindhyachal Power Station",
+                  lat: 24.0620,
+                  lon: 82.6710,
+                  severity: "critical",
+                  message: "CO₂ plume enhancement exceeded critical threshold (>450 ppm)",
+                  time: "2m ago",
+                  color: "border-red-500 bg-red-950/20 text-red-400",
+                },
+                {
+                  id: "alert-2",
+                  facility: "Sasan Ultra Mega Power",
+                  lat: 23.9870,
+                  lon: 82.6120,
+                  severity: "high",
+                  message: "Methane leak detected (CH₄ anomaly +15.4% above background)",
+                  time: "15m ago",
+                  color: "border-orange-500 bg-orange-950/20 text-orange-400",
+                },
+                {
+                  id: "alert-3",
+                  facility: "Korba Coal Plant",
+                  lat: 22.3500,
+                  lon: 82.6800,
+                  severity: "medium",
+                  message: "NO₂ plume density rising (+8.2% daily increase)",
+                  time: "1h ago",
+                  color: "border-yellow-500 bg-yellow-950/20 text-yellow-400",
+                },
+                {
+                  id: "alert-4",
+                  facility: "Ramagundam STPS",
+                  lat: 18.7560,
+                  lon: 79.4320,
+                  severity: "low",
+                  message: "SO₂ sensor status variance under normal tolerance",
+                  time: "3h ago",
+                  color: "border-blue-500 bg-blue-950/20 text-blue-400",
+                },
+              ].map((alertItem) => (
+                <button
+                  key={alertItem.id}
+                  onClick={() => {
+                    setCameraTarget({ lat: alertItem.lat, lon: alertItem.lon });
+                    const match = enhancedPlants.find((p) => p.name.toLowerCase().includes(alertItem.facility.split(" ")[0].toLowerCase()));
+                    if (match) {
+                      setSelectedFacility(match);
+                    }
+                  }}
+                  className={`w-full text-left p-2 rounded border ${alertItem.color} transition-all hover:scale-[1.01] cursor-pointer flex flex-col gap-1`}
+                >
+                  <div className="flex items-center justify-between text-[9px] font-bold">
+                    <span className="uppercase tracking-wider font-mono">{alertItem.severity} alert</span>
+                    <span className="text-ground-450">{alertItem.time}</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-instrument line-clamp-1">{alertItem.facility}</span>
+                  <p className="text-[9px] text-ground-300 leading-snug">{alertItem.message}</p>
+                </button>
+              ))}
+            </div>
+          </Card>
         </div>
 
         {/* 3D Map Center View Container */}
@@ -688,36 +766,69 @@ export default function MapPage() {
           
           {/* Comparison Mode Setup */}
           {comparisonMode && (
-            <Card className="p-4 bg-ground-900/80 border-ground-700 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
-              <div className="space-y-1">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-sensor">Comparison Mode Active</span>
-                <p className="text-ground-400">Plot differences between predictions and compute emission growth percentages.</p>
+            <Card className="p-4 bg-ground-900/80 border-ground-700 space-y-3.5 text-xs animate-in slide-in-from-top duration-250">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-ground-800 pb-2">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-sensor">Prediction Analysis Engine</span>
+                  <p className="text-[11px] text-ground-400">Perform comparative calculations between AI estimation runs.</p>
+                </div>
+                <div className="flex items-center gap-1 bg-ground-950 border border-ground-850 p-1 rounded-lg flex-wrap sm:flex-nowrap">
+                  {[
+                    { id: "split-screen", label: "Split-Screen" },
+                    { id: "before-after", label: "Before/After" },
+                    { id: "gas-compare", label: "Gas Compare" },
+                    { id: "time-compare", label: "Time Series" },
+                    { id: "difference-layer", label: "Diff Layer" },
+                    { id: "confidence-layer", label: "Confidence" },
+                  ].map((btn) => (
+                    <button
+                      key={btn.id}
+                      onClick={() => setComparisonType(btn.id as any)}
+                      className={`px-2 py-1 rounded text-[10px] font-semibold transition-all cursor-pointer ${
+                        comparisonType === btn.id
+                          ? "bg-sensor text-ground-950 shadow-sm"
+                          : "text-ground-400 hover:text-instrument"
+                      }`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1">
-                  <span className="text-ground-400">Source A:</span>
-                  <select
-                    value={comparePredictionA}
-                    onChange={(e) => setComparePredictionA(e.target.value)}
-                    className="bg-ground-950 border border-ground-750 px-2 py-1 rounded text-instrument"
-                  >
-                    <option value="pred-1">Vindhyachal (v1.2)</option>
-                    <option value="pred-2">Sasan scene (v1.2)</option>
-                  </select>
+
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-ground-450">Source A (Base):</span>
+                    <select
+                      value={comparePredictionA}
+                      onChange={(e) => setComparePredictionA(e.target.value)}
+                      className="bg-ground-950 border border-ground-750 px-2 py-1 rounded text-instrument font-semibold"
+                    >
+                      <option value="pred-1">Vindhyachal Scenario (v1.2)</option>
+                      <option value="pred-2">Sasan Local Scenario (v1.2)</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-ground-450">Source B (Compare):</span>
+                    <select
+                      value={comparePredictionB}
+                      onChange={(e) => setComparePredictionB(e.target.value)}
+                      className="bg-ground-950 border border-ground-750 px-2 py-1 rounded text-instrument font-semibold"
+                    >
+                      <option value="pred-1">Vindhyachal Scenario (v1.2)</option>
+                      <option value="pred-2">Sasan Local Scenario (v1.2)</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-ground-400">Source B:</span>
-                  <select
-                    value={comparePredictionB}
-                    onChange={(e) => setComparePredictionB(e.target.value)}
-                    className="bg-ground-950 border border-ground-750 px-2 py-1 rounded text-instrument"
-                  >
-                    <option value="pred-1">Vindhyachal (v1.2)</option>
-                    <option value="pred-2">Sasan scene (v1.2)</option>
-                  </select>
-                </div>
-                <div className="px-2 py-1.5 rounded bg-sensor/5 border border-sensor/20 text-sensor font-mono">
-                  Diff: +20.2% Growth
+                
+                <div className="flex items-center gap-3">
+                  <div className="px-2.5 py-1 rounded bg-sensor/5 border border-sensor/20 text-sensor font-mono text-[11px] font-bold">
+                    Delta Max: +20.2% (Anomaly Spike)
+                  </div>
+                  <div className="px-2.5 py-1 rounded bg-blue-500/5 border border-blue-500/20 text-blue-400 font-mono text-[11px] font-bold">
+                    Confidence: 94.2% (High Correlation)
+                  </div>
                 </div>
               </div>
             </Card>
@@ -744,6 +855,8 @@ export default function MapPage() {
               }}
               onLiveMeasurement={setLiveGisMeasurement}
               clearTrigger={clearTrigger}
+              comparisonType={comparisonType}
+              cameraTarget={cameraTarget}
             />
 
             {/* Layer Visibility Overlays Panel (Floating Right) */}

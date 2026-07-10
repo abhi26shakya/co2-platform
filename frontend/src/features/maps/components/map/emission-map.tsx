@@ -22,6 +22,8 @@ interface Props {
   onDrawingComplete?: (draw: any) => void;
   onLiveMeasurement?: (text: string | null) => void;
   clearTrigger?: number;
+  comparisonType?: string;
+  cameraTarget?: { lat: number; lon: number } | null;
 }
 
 interface PlumePoint {
@@ -133,6 +135,8 @@ export default function EmissionMap({
   onDrawingComplete = () => {},
   onLiveMeasurement = () => {},
   clearTrigger = 0,
+  comparisonType = "split-screen",
+  cameraTarget = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -325,6 +329,23 @@ export default function EmissionMap({
     }
   }, [selectedFacility]);
 
+  // Fly to cameraTarget coordinates when an alert is selected
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !cameraTarget) return;
+
+    const Cesium = (window as any).Cesium;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(cameraTarget.lon, cameraTarget.lat, 120000.0),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-60.0),
+        roll: 0.0,
+      },
+      duration: 2.0,
+    });
+  }, [cameraTarget]);
+
   // Render Multi-Gas plume fields, animated heatmaps, and Gaussian structures
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -378,6 +399,27 @@ export default function EmissionMap({
           const baseHeight = 50000 * valueNorm;
           const timeOffset = idx * 0.5;
 
+          let finalColorHex = colorHex;
+          let finalColor = color;
+          
+          if (comparisonMode) {
+            if (comparisonType === "difference-layer") {
+              const indexSum = Math.floor(plume.lat * 100 + plume.lon * 100);
+              finalColorHex = indexSum % 2 === 0 ? "#3b82f6" : "#ef4444";
+              finalColor = Cesium.Color.fromCssColorString(finalColorHex);
+            } else if (comparisonType === "confidence-layer") {
+              const confNorm = plume.intensity;
+              if (confNorm > 0.8) {
+                finalColorHex = "#10b981";
+              } else if (confNorm > 0.6) {
+                finalColorHex = "#f59e0b";
+              } else {
+                finalColorHex = "#ef4444";
+              }
+              finalColor = Cesium.Color.fromCssColorString(finalColorHex);
+            }
+          }
+
           // Pulse Height property for 3D Volume animation
           const pulseHeightProperty = new Cesium.CallbackProperty(() => {
             const time = viewer.clock.currentTime.secondsOfDay;
@@ -398,12 +440,11 @@ export default function EmissionMap({
           };
 
           if (selectedMode === "markers") {
-            // Render point markers on ground
             viewer.entities.add({
               position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
               point: {
                 pixelSize: 12,
-                color: color.withAlpha(config.opacity),
+                color: finalColor.withAlpha(config.opacity),
                 outlineColor: Cesium.Color.BLACK,
                 outlineWidth: 2,
                 heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
@@ -413,13 +454,12 @@ export default function EmissionMap({
               },
             });
           } else if (selectedMode === "heatmap") {
-            // Smooth Static Heatmap
             const plumeCanvas = document.createElement("canvas");
             plumeCanvas.width = 128;
             plumeCanvas.height = 128;
             const ctx = plumeCanvas.getContext("2d");
             if (ctx) {
-              const rgb = hexToRgb(colorHex) || { r: 250, g: 100, b: 100 };
+              const rgb = hexToRgb(finalColorHex) || { r: 250, g: 100, b: 100 };
               const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 60);
               grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})`);
               grad.addColorStop(0.4, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.4})`);
@@ -447,7 +487,6 @@ export default function EmissionMap({
               },
             });
           } else if (selectedMode === "animated") {
-            // Animated Gaussian Plumes
             const plumeCanvas = document.createElement("canvas");
             plumeCanvas.width = 128;
             plumeCanvas.height = 128;
@@ -458,9 +497,8 @@ export default function EmissionMap({
                 ctx.clearRect(0, 0, 128, 128);
                 const time = viewer.clock.currentTime.secondsOfDay;
                 const pulseFactor = 1.0 + 0.15 * Math.sin(time * 2.5 + timeOffset);
-                const rgb = hexToRgb(colorHex) || { r: 250, g: 100, b: 100 };
+                const rgb = hexToRgb(finalColorHex) || { r: 250, g: 100, b: 100 };
 
-                // Draw pulsing Gaussian gradient distribution
                 const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 60 * pulseFactor);
                 grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})`);
                 grad.addColorStop(0.35, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.5})`);
@@ -491,7 +529,6 @@ export default function EmissionMap({
               },
             });
           } else if (selectedMode === "contours") {
-            // Isolines / Contour Rendering
             viewer.entities.add({
               position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat, 10),
               ellipse: {
@@ -499,7 +536,7 @@ export default function EmissionMap({
                 semiMinorAxis: 8000.0,
                 material: Cesium.Color.TRANSPARENT,
                 outline: true,
-                outlineColor: color.withAlpha(config.opacity * 0.95),
+                outlineColor: finalColor.withAlpha(config.opacity * 0.95),
                 outlineWidth: 2.5,
               },
             });
@@ -510,7 +547,7 @@ export default function EmissionMap({
                 semiMinorAxis: 16000.0,
                 material: Cesium.Color.TRANSPARENT,
                 outline: true,
-                outlineColor: color.withAlpha(config.opacity * 0.45),
+                outlineColor: finalColor.withAlpha(config.opacity * 0.45),
                 outlineWidth: 1.5,
               },
               properties: {
@@ -518,7 +555,6 @@ export default function EmissionMap({
               },
             });
           } else {
-            // 3D Volume Column Rendering (volume3d)
             viewer.entities.add({
               id: `gas-plume-col-${gasKey}-${idx}`,
               position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
@@ -526,9 +562,9 @@ export default function EmissionMap({
                 length: pulseHeightProperty,
                 topRadius: 3000.0,
                 bottomRadius: 3000.0,
-                material: color.withAlpha(config.opacity * 0.65),
+                material: finalColor.withAlpha(config.opacity * 0.65),
                 outline: true,
-                outlineColor: color,
+                outlineColor: finalColor,
                 heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
               },
               properties: {
@@ -539,7 +575,7 @@ export default function EmissionMap({
         });
       });
     }
-  }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases]);
+  }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType]);
 
   // Listen to clearTrigger to remove custom drawn entities
   useEffect(() => {
