@@ -14,8 +14,23 @@ export function useReports() {
 export function useCreateReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (format: "pdf" | "csv") => api.post<ReportOut>("/reports", { format }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
+    mutationFn: (data: Partial<ReportOut>) => api.post<ReportOut>("/reports", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useUpdateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ReportOut> }) =>
+      api.patch<ReportOut>(`/reports/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
@@ -23,7 +38,10 @@ export function useDeleteReport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/reports/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reports"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
