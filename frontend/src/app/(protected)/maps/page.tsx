@@ -30,7 +30,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
-import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
+import { BarChart, Bar, Cell, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
 // Cesium loads on client and requires script files in head
 const EmissionMap = dynamic(() => import("@/features/maps/components/map/emission-map"), {
@@ -113,6 +113,7 @@ export default function MapPage() {
   const [timelinePeriod, setTimelinePeriod] = useState<"daily" | "weekly" | "monthly" | "yearly">("monthly");
   const [sliderIndex, setSliderIndex] = useState(2);
   const [isTimelinePlaying, setIsTimelinePlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,9 +142,9 @@ export default function MapPage() {
     const ticksCount = timelineTicks[timelinePeriod].length;
     const interval = setInterval(() => {
       setSliderIndex((idx) => (idx + 1) % ticksCount);
-    }, 1500);
+    }, 1500 / playbackSpeed);
     return () => clearInterval(interval);
-  }, [isTimelinePlaying, timelinePeriod]);
+  }, [isTimelinePlaying, timelinePeriod, playbackSpeed]);
 
   // Handle drawing mode action triggers
   const handleDrawingModeChange = (mode: string) => {
@@ -208,6 +209,39 @@ export default function MapPage() {
       item.lon.toFixed(4).includes(query)
     );
   }).slice(0, 5) : [];
+
+  // Dynamically scale hotspots based on the active timeline index to simulate historical variations
+  const timeFactor = 0.85 + 0.15 * Math.sin(sliderIndex * 1.5) + 0.05 * Math.cos(sliderIndex * 3);
+  const timeScaledHotspots = hotspots.map(h => ({
+    ...h,
+    emission_tonnes_per_year: h.emission_tonnes_per_year ? Math.round(h.emission_tonnes_per_year * timeFactor) : 4500,
+    intensity: Math.min(1.0, Math.max(0.1, h.intensity * timeFactor)),
+  }));
+
+  // Find currently selected facility with values scaled at the active timeline tick
+  let inspectedFacility: any = null;
+  if (selectedFacility) {
+    const ticks = timelineTicks[timelinePeriod];
+    const baseCo2 = selectedFacility.co2_enhancement_ppm || parseFloat(selectedFacility.co2) || 45.5;
+    
+    // Period-based historical trend dataset mapping
+    const historicalData = ticks.map((tick, i) => {
+      const val = baseCo2 * (0.85 + 0.15 * Math.sin(i * 1.5) + 0.05 * Math.cos(i * 3));
+      return {
+        month: tick,
+        value: val,
+      };
+    });
+    
+    const currentValue = historicalData[sliderIndex]?.value || baseCo2;
+
+    inspectedFacility = {
+      ...selectedFacility,
+      latest_prediction: `${currentValue.toFixed(2)} ppm`,
+      historical: historicalData,
+      co2: currentValue.toFixed(2),
+    };
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -488,7 +522,7 @@ export default function MapPage() {
           <div className="relative">
             <EmissionMap
               plants={enhancedPlants}
-              hotspots={hotspots}
+              hotspots={timeScaledHotspots}
               showPlants={showLayers.plants}
               showHotspots={showLayers.heatmap}
               selectedMode={visualizationMode}
@@ -536,11 +570,13 @@ export default function MapPage() {
             <div className="absolute bottom-4 right-4 bg-ground-950/95 border border-ground-700/80 rounded-xl p-3.5 z-10 w-48 shadow-2xl space-y-2">
               <div className="flex justify-between items-baseline">
                 <span className="text-[10px] font-bold text-ground-400 uppercase">Intensity Legend</span>
-                <span className="text-[9px] text-sensor font-bold font-mono">PPM / Density</span>
+                <span className="text-[9px] text-sensor font-bold font-mono">
+                  {Math.round(380 * timeFactor)} - {Math.round(480 * timeFactor)} PPM
+                </span>
               </div>
               <div className="h-2 rounded-full plume-gradient" />
-              <div className="flex justify-between text-[9px] text-ground-400">
-                <span>Very Low</span>
+              <div className="flex justify-between text-[9px] text-ground-400 font-mono">
+                <span>Low</span>
                 <span>Moderate</span>
                 <span>Critical</span>
               </div>
@@ -580,23 +616,57 @@ export default function MapPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setIsTimelinePlaying(!isTimelinePlaying)}
-                className="h-8 w-8 rounded-full border border-ground-700 hover:border-ground-450 bg-ground-950 flex items-center justify-center text-sensor cursor-pointer"
-              >
-                {isTimelinePlaying ? "⏸" : "▶"}
-              </button>
+            <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+              {/* Playback Action Group */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setSliderIndex((idx) => (idx - 1 + timelineTicks[timelinePeriod].length) % timelineTicks[timelinePeriod].length)}
+                  className="h-8 w-8 rounded-lg border border-ground-700 hover:border-ground-450 bg-ground-950 flex items-center justify-center text-instrument cursor-pointer text-xs font-mono"
+                  title="Previous frame"
+                >
+                  ◀
+                </button>
+                <button
+                  onClick={() => setIsTimelinePlaying(!isTimelinePlaying)}
+                  className="h-8 w-8 rounded-lg border border-ground-700 hover:border-ground-450 bg-ground-950 flex items-center justify-center text-sensor cursor-pointer"
+                  title={isTimelinePlaying ? "Pause" : "Play"}
+                >
+                  {isTimelinePlaying ? "⏸" : "▶"}
+                </button>
+                <button
+                  onClick={() => setSliderIndex((idx) => (idx + 1) % timelineTicks[timelinePeriod].length)}
+                  className="h-8 w-8 rounded-lg border border-ground-700 hover:border-ground-450 bg-ground-950 flex items-center justify-center text-instrument cursor-pointer text-xs font-mono"
+                  title="Next frame"
+                >
+                  ▶
+                </button>
+              </div>
+
+              {/* Playback speed selector */}
+              <div className="flex items-center gap-1.5 text-xs text-ground-400 shrink-0">
+                <span>Speed:</span>
+                <select
+                  value={playbackSpeed}
+                  onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                  className="bg-ground-950 border border-ground-700 rounded px-1.5 py-1 text-[10px] text-instrument focus:outline-none cursor-pointer"
+                >
+                  <option value="0.5">0.5x</option>
+                  <option value="1.0">1.0x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2.5">2.5x</option>
+                  <option value="4.0">4.0x</option>
+                </select>
+              </div>
               
               {/* Slider */}
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-2 min-w-[12rem]">
                 <input
                   type="range"
                   min={0}
                   max={timelineTicks[timelinePeriod].length - 1}
                   value={sliderIndex}
                   onChange={(e) => setSliderIndex(Number(e.target.value))}
-                  className="w-full accent-sensor bg-ground-800 h-1 rounded-lg cursor-pointer"
+                  className="w-full accent-sensor bg-ground-800 h-1 rounded-lg cursor-pointer animate-pulse"
                 />
                 
                 {/* Labels */}
@@ -604,7 +674,7 @@ export default function MapPage() {
                   {timelineTicks[timelinePeriod].map((tick, i) => (
                     <span
                       key={i}
-                      className={i === sliderIndex ? "text-sensor font-bold" : ""}
+                      className={i === sliderIndex ? "text-sensor font-bold animate-pulse" : ""}
                     >
                       {tick}
                     </span>
@@ -633,12 +703,12 @@ export default function MapPage() {
               <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5 border-b border-ground-750 pb-2">
                 <Info className="h-3.5 w-3.5" /> Industrial Facility Inspector
               </h3>
-              {selectedFacility ? (
+              {inspectedFacility ? (
                 <div className="space-y-4 text-xs">
                   <div>
-                    <h4 className="text-sm font-semibold text-sensor">{selectedFacility.name}</h4>
+                    <h4 className="text-sm font-semibold text-sensor">{inspectedFacility.name}</h4>
                     <span className="text-[10px] text-ground-500">
-                      {selectedFacility.industry || selectedFacility.sector || "Energy Production"} &middot; {selectedFacility.company || "n/a"}
+                      {inspectedFacility.industry || inspectedFacility.sector || "Energy Production"} &middot; {inspectedFacility.company || "n/a"}
                     </span>
                   </div>
 
@@ -646,29 +716,29 @@ export default function MapPage() {
                     <div>
                       <dt className="text-ground-400">Coordinates:</dt>
                       <dd className="font-mono text-instrument mt-0.5">
-                        {selectedFacility.lat != null ? selectedFacility.lat.toFixed(4) : "—"}, {selectedFacility.lon != null ? selectedFacility.lon.toFixed(4) : "—"}
+                        {inspectedFacility.lat != null ? inspectedFacility.lat.toFixed(4) : "—"}, {inspectedFacility.lon != null ? inspectedFacility.lon.toFixed(4) : "—"}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-ground-400">Country:</dt>
-                      <dd className="text-instrument mt-0.5">{selectedFacility.country || "India"}</dd>
+                      <dd className="text-instrument mt-0.5">{inspectedFacility.country || "India"}</dd>
                     </div>
                     <div>
                       <dt className="text-ground-400">Latest Prediction:</dt>
                       <dd className="font-mono text-sensor font-bold mt-0.5">
-                        {selectedFacility.latest_prediction || `+${selectedFacility.co2} ppm`}
+                        {inspectedFacility.latest_prediction}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-ground-400">AI Confidence:</dt>
                       <dd className="font-mono text-instrument mt-0.5">
-                        {selectedFacility.confidence || "91%"}
+                        {inspectedFacility.confidence || "91%"}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-ground-400">Predicted Gases:</dt>
                       <dd className="text-instrument mt-0.5 flex flex-wrap gap-1">
-                        {(selectedFacility.predicted_gases || ["CO₂", "NO₂"]).map((g: string) => (
+                        {(inspectedFacility.predicted_gases || ["CO₂", "NO₂"]).map((g: string) => (
                           <span key={g} className="px-1 py-0.5 bg-ground-850 rounded text-[9px] font-mono">{g}</span>
                         ))}
                       </dd>
@@ -677,27 +747,30 @@ export default function MapPage() {
                       <dt className="text-ground-400">Trend Status:</dt>
                       <dd className="font-mono text-instrument mt-0.5 flex items-center gap-1">
                         <TrendingUp className="h-3 w-3 text-red-400" />
-                        <span>{selectedFacility.trend || "+2.4% (increasing)"}</span>
+                        <span>{inspectedFacility.trend || "+2.4% (increasing)"}</span>
                       </dd>
                     </div>
                   </dl>
 
                   {/* Responsive Sparkline monthly trend chart */}
                   <div className="border-t border-ground-800 pt-3 space-y-2">
-                    <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Monthly Emission Trend</span>
+                    <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Emission Trend ({timelinePeriod})</span>
                     <div className="h-20 w-full bg-ground-950/40 rounded border border-ground-800/60 p-1">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={selectedFacility.historical || [
-                          { month: "Jan", value: 390 },
-                          { month: "Feb", value: 405 },
-                          { month: "Mar", value: 412 }
-                        ]}>
+                        <BarChart data={inspectedFacility.historical || []}>
                           <XAxis dataKey="month" stroke="#4b5563" fontSize={7} tickLine={false} axisLine={false} />
                           <Tooltip
                             contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: 9 }}
                             labelStyle={{ color: "#a1a1aa" }}
                           />
-                          <Bar dataKey="value" fill="#10b981" radius={[2, 2, 0, 0]} />
+                          <Bar dataKey="value" fill="#1f2937" radius={[2, 2, 0, 0]}>
+                            {inspectedFacility.historical.map((entry: any, index: number) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={index === sliderIndex ? "#10b981" : "#1f2937"}
+                              />
+                            ))}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -706,15 +779,13 @@ export default function MapPage() {
                   {/* Historical values list */}
                   <div className="border-t border-ground-800 pt-3 space-y-1.5">
                     <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Historical Values Detail</span>
-                    <div className="divide-y divide-ground-850 bg-ground-950/20 rounded border border-ground-800/60 font-mono text-[10px]">
-                      {(selectedFacility.historical || [
-                        { month: "Jan", value: 390 },
-                        { month: "Feb", value: 405 },
-                        { month: "Mar", value: 412 }
-                      ]).map((item: any, i: number) => (
-                        <div key={i} className="flex justify-between p-2">
-                          <span className="text-ground-400">{item.month}</span>
-                          <span className="text-instrument font-semibold">{typeof item.value === "number" ? item.value.toFixed(2) : item.value} ppm</span>
+                    <div className="divide-y divide-ground-850 bg-ground-950/20 rounded border border-ground-800/60 font-mono text-[10px] max-h-24 overflow-y-auto">
+                      {(inspectedFacility.historical || []).map((item: any, i: number) => (
+                        <div key={i} className={`flex justify-between p-2 ${i === sliderIndex ? "bg-sensor/5 border-l-2 border-sensor" : ""}`}>
+                          <span className={i === sliderIndex ? "text-sensor font-bold" : "text-ground-400"}>{item.month}</span>
+                          <span className={i === sliderIndex ? "text-sensor font-bold" : "text-instrument font-semibold"}>
+                            {typeof item.value === "number" ? item.value.toFixed(2) : item.value} ppm
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -734,7 +805,7 @@ export default function MapPage() {
                       Open Dataset
                     </button>
                     <button
-                      onClick={() => alert(`Emissia Copilot: ${selectedFacility.name} is operating in sector ${selectedFacility.industry || selectedFacility.sector || "Power Generation"} with confidence ${selectedFacility.confidence || "91%"}.`)}
+                      onClick={() => alert(`Emissia Copilot: ${inspectedFacility.name} is operating in sector ${inspectedFacility.industry || inspectedFacility.sector || "Power Generation"} with confidence ${inspectedFacility.confidence || "91%"}.`)}
                       className="px-3 py-2 bg-sensor/10 hover:bg-sensor/20 border border-sensor/25 text-[10px] font-semibold text-sensor rounded-lg flex items-center gap-1.5 cursor-pointer"
                     >
                       <Cpu className="h-3 w-3" /> Ask Copilot
