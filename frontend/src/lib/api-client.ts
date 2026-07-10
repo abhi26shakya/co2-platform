@@ -215,7 +215,12 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
         fuel_type: "Coal",
         capacity_mw: 4760,
         lat: 24.0983,
-        lon: 82.6714
+        lon: 82.6714,
+        co2_enhancement_ppm: 0.97,
+        co2_bg_std_ppm: 1.796,
+        co2_no2_peak_km: 7.1,
+        co2_soundings: 7114,
+        co2_wind_diff_deg: 33.0
       },
       {
         id: "plant-2",
@@ -224,7 +229,40 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
         fuel_type: "Coal",
         capacity_mw: 3960,
         lat: 23.9782,
-        lon: 82.6289
+        lon: 82.6289,
+        co2_enhancement_ppm: 1.024,
+        co2_bg_std_ppm: 2.086,
+        co2_no2_peak_km: 15.5,
+        co2_soundings: 3308,
+        co2_wind_diff_deg: 96.0
+      },
+      {
+        id: "plant-3",
+        name: "Mundra Ultra Mega Power Project",
+        country: "India",
+        fuel_type: "Coal",
+        capacity_mw: 4000,
+        lat: 22.82,
+        lon: 69.55,
+        co2_enhancement_ppm: null,
+        co2_bg_std_ppm: 0.825,
+        co2_no2_peak_km: 64.7,
+        co2_soundings: 57,
+        co2_wind_diff_deg: 146.0
+      },
+      {
+        id: "plant-4",
+        name: "Tirora Thermal Power Station",
+        country: "India",
+        fuel_type: "Coal",
+        capacity_mw: 3300,
+        lat: 21.41,
+        lon: 79.94,
+        co2_enhancement_ppm: 1.724,
+        co2_bg_std_ppm: 1.197,
+        co2_no2_peak_km: 2.0,
+        co2_soundings: 671,
+        co2_wind_diff_deg: 92.0
       }
     ] as unknown as T;
   }
