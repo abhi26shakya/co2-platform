@@ -129,6 +129,11 @@ export default function MapPage() {
   const [comparePredictionA, setComparePredictionA] = useState("pred-1");
   const [comparePredictionB, setComparePredictionB] = useState("pred-2");
 
+  // Export & History states
+  const [exportHistory, setExportHistory] = useState<{ id: string; format: string; time: string; status: string }[]>([]);
+  const [activeExportingFormat, setActiveExportingFormat] = useState<string | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
+
   // Share
   const [shareLinkOpen, setShareLinkOpen] = useState(false);
   const [shareConfigLink, setShareConfigLink] = useState("");
@@ -179,9 +184,120 @@ export default function MapPage() {
     downloadAnchor.remove();
   };
 
-  // Export handlers
+  // Export handlers with progress animation and local downloads
   const handleExportMap = (format: string) => {
-    alert(`Exporting current 3D viewport coordinates and layers as ${format.toUpperCase()}...`);
+    if (activeExportingFormat) return;
+    setActiveExportingFormat(format);
+    setExportProgress(0);
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 20;
+      setExportProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        executeDownload(format);
+
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setExportHistory((prev) => [
+          {
+            id: Math.random().toString(36).substring(2, 9),
+            format: format.toUpperCase(),
+            time: timestamp,
+            status: "Successful",
+          },
+          ...prev,
+        ]);
+        setActiveExportingFormat(null);
+      }
+    }, 150);
+  };
+
+  const executeDownload = (format: string) => {
+    const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
+    const downloadData: any = {
+      timestamp: new Date().toISOString(),
+      activeGases: activeGasKeys,
+      basemap: activeBasemap,
+      plants: enhancedPlants.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, co2: p.latest_prediction, sector: p.sector })),
+      hotspots: timeScaledHotspots.map((h, i) => ({ id: i, lat: h.lat, lon: h.lon, value: h.emission_tonnes_per_year })),
+    };
+
+    let blob;
+    let filename = `emissia_export.${format}`;
+
+    if (format === "json") {
+      blob = new Blob([JSON.stringify(downloadData, null, 2)], { type: "application/json" });
+    } else if (format === "geojson") {
+      const geojson = {
+        type: "FeatureCollection",
+        features: [
+          ...enhancedPlants.map((p) => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+            properties: { name: p.name, type: "plant", emissions: p.latest_prediction },
+          })),
+          ...timeScaledHotspots.map((h, i) => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [h.lon, h.lat] },
+            properties: { id: i, type: "hotspot", tonnes_per_year: h.emission_tonnes_per_year },
+          })),
+        ],
+      };
+      blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" });
+    } else if (format === "csv") {
+      let csvContent = "Type,Name,Lat,Lon,Sector,Emissions\n";
+      enhancedPlants.forEach((p) => {
+        csvContent += `Plant,"${p.name}",${p.lat},${p.lon},"${p.sector}",${p.latest_prediction}\n`;
+      });
+      timeScaledHotspots.forEach((h, i) => {
+        csvContent += `Hotspot,"Hotspot #${i + 1}",${h.lat},${h.lon},Anomaly,${h.emission_tonnes_per_year} t/y\n`;
+      });
+      blob = new Blob([csvContent], { type: "text/csv" });
+    } else if (format === "png") {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#09090b";
+        ctx.fillRect(0, 0, 640, 480);
+        ctx.fillStyle = "#10b981";
+        ctx.font = "bold 20px sans-serif";
+        ctx.fillText("EMISSIA 3D EARTH VIEWPORT RENDER", 50, 80);
+        ctx.fillStyle = "#a1a1aa";
+        ctx.font = "14px monospace";
+        ctx.fillText(`Timestamp: ${new Date().toLocaleString()}`, 50, 130);
+        ctx.fillText(`Active Basemap: ${activeBasemap.toUpperCase()}`, 50, 160);
+        ctx.fillText(`Active Gases: ${activeGasKeys.join(", ").toUpperCase()}`, 50, 190);
+        ctx.fillText(`Inspected: ${inspectedFacility ? inspectedFacility.name : "None"}`, 50, 220);
+      }
+      canvas.toBlob((b) => {
+        if (b) {
+          const url = URL.createObjectURL(b);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "emissia_viewport.png";
+          link.click();
+        }
+      });
+      return;
+    } else if (format === "tiff") {
+      filename = `emissia_raster_placeholder.tif`;
+      blob = new Blob(["Simulated GeoTIFF raster bands data placeholder content for spatial prediction clipping."], { type: "image/tiff" });
+    } else {
+      filename = `emissia_report_placeholder.pdf`;
+      blob = new Blob(["%PDF-1.4\n% Simulated Emissia Spatial Report PDF Document export placeholder content."], { type: "application/pdf" });
+    }
+
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   // Share configuration links
@@ -924,28 +1040,58 @@ export default function MapPage() {
                 <p className="text-[11px] text-ground-450">Download currently filtered layers, geodetic coordinates, or 3D viewport renders.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { format: "png", label: "PNG Image" },
-                    { format: "pdf", label: "PDF Document" },
-                    { format: "geojson", label: "GeoJSON File" },
-                    { format: "tiff", label: "GeoTIFF bands" },
+                    { format: "png", label: "PNG Viewport" },
+                    { format: "geojson", label: "GeoJSON Spatial" },
                     { format: "csv", label: "CSV Table" },
-                  ].map((exp) => (
-                    <button
-                      key={exp.format}
-                      onClick={() => handleExportMap(exp.format)}
-                      className="px-2.5 py-1.5 bg-ground-800 hover:bg-ground-750 text-[11px] text-instrument font-semibold rounded-lg text-left flex items-center gap-2 cursor-pointer border border-ground-750"
-                    >
-                      <Download className="h-3 w-3 text-sensor" /> {exp.label}
-                    </button>
-                  ))}
+                    { format: "json", label: "JSON Metadata" },
+                    { format: "tiff", label: "GeoTIFF (Raster)" },
+                    { format: "pdf", label: "PDF Report" },
+                  ].map((exp) => {
+                    const isExporting = activeExportingFormat === exp.format;
+                    return (
+                      <div key={exp.format} className="flex flex-col gap-1 w-full">
+                        <button
+                          disabled={activeExportingFormat !== null}
+                          onClick={() => handleExportMap(exp.format)}
+                          className="px-2.5 py-1.5 bg-ground-800 hover:bg-ground-750 text-[11px] text-instrument font-semibold rounded-lg text-left flex items-center justify-between cursor-pointer border border-ground-750 disabled:opacity-50"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Download className={`h-3 w-3 text-sensor ${isExporting ? "animate-bounce" : ""}`} />
+                            {exp.label}
+                          </span>
+                          {isExporting && <span className="text-[8px] font-mono text-sensor animate-pulse">{exportProgress}%</span>}
+                        </button>
+                        {isExporting && (
+                          <div className="w-full bg-ground-950 h-1.5 rounded-full overflow-hidden border border-ground-800">
+                            <div className="bg-sensor h-full transition-all duration-150" style={{ width: `${exportProgress}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Export history logs */}
+                {exportHistory.length > 0 && (
+                  <div className="border-t border-ground-800 pt-3.5 space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-ground-500 tracking-wider">Export History</span>
+                    <div className="divide-y divide-ground-850 font-mono text-[9px] text-ground-400 bg-ground-950/20 rounded border border-ground-800/60 max-h-24 overflow-y-auto pr-1">
+                      {exportHistory.map((hist) => (
+                        <div key={hist.id} className="flex justify-between p-2">
+                          <span>{hist.time} &middot; {hist.format}</span>
+                          <span className="text-sensor font-bold uppercase">{hist.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </div>
         </div>
       </div>
 
-      {/* Share Link Generation Overlay */}
+      {/* Share Link Generation Overlay with functional QR Code */}
       {shareLinkOpen && (
         <div className="fixed inset-0 z-50 bg-ground-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <Card className="w-full max-w-sm p-6 bg-ground-900 border-ground-700 space-y-4">
@@ -953,9 +1099,21 @@ export default function MapPage() {
               <h3 className="text-base font-semibold text-instrument">Generated Shareable Link</h3>
               <p className="text-xs text-ground-400">Includes active basemaps, layers, camera settings, and gas selections.</p>
             </div>
+            
             <div className="p-3 bg-ground-950 border border-ground-750 rounded-lg font-mono text-[10px] text-sensor break-all select-all">
               {shareConfigLink}
             </div>
+
+            {/* Premium QR Code Render */}
+            <div className="flex flex-col items-center justify-center space-y-2 p-3.5 bg-ground-950 rounded-lg border border-ground-800">
+              <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Scan to Open Map</span>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=10b981&bgcolor=09090b&data=${encodeURIComponent(shareConfigLink)}`}
+                alt="Emissia Map QR Code"
+                className="h-28 w-28 rounded border border-ground-800 p-1 bg-ground-950"
+              />
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => {
