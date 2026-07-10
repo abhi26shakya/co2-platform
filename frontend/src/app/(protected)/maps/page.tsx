@@ -49,10 +49,11 @@ export default function MapPage() {
   const {
     activeBasemap,
     setActiveBasemap,
-    selectedGas,
-    setSelectedGas,
     selectedFacility,
-    setSelectedFacility
+    setSelectedFacility,
+    gases,
+    toggleGas,
+    setGasOpacity
   } = useMapStore();
 
   // Map settings and local states
@@ -116,7 +117,8 @@ export default function MapPage() {
 
   // Share configuration links
   const triggerMapShare = () => {
-    const cameraParams = `lat=22.50&lon=79.50&zoom=9&basemap=${activeBasemap}&gas=${selectedGas}`;
+    const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled).join(",");
+    const cameraParams = `lat=22.50&lon=79.50&zoom=9&basemap=${activeBasemap}&gases=${activeGasKeys}`;
     const generated = `https://co2-platform-nine.vercel.app/map?${cameraParams}`;
     setShareConfigLink(generated);
     setShareLinkOpen(true);
@@ -293,30 +295,55 @@ export default function MapPage() {
             <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
               <Layers2 className="h-3.5 w-3.5" /> Multi-Gas Layers
             </h3>
-            <div className="space-y-2 text-xs">
+            <div className="space-y-3 text-xs">
               {[
-                { id: "co2", label: "Carbon Dioxide (CO₂)", color: "bg-red-500" },
-                { id: "ch4", label: "Methane (CH₄)", color: "bg-purple-500" },
-                { id: "no2", label: "Nitrogen Dioxide (NO₂)", color: "bg-orange-500" },
-                { id: "so2", label: "Sulfur Dioxide (SO₂)", color: "bg-pink-500" },
-                { id: "co", label: "Carbon Monoxide (CO)", color: "bg-teal-500" },
-              ].map((gas) => (
-                <button
-                  key={gas.id}
-                  onClick={() => setSelectedGas(gas.id)}
-                  className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors cursor-pointer border ${
-                    selectedGas === gas.id
-                      ? "bg-ground-800 text-instrument border-ground-700"
-                      : "hover:bg-ground-850/40 text-ground-400 border-transparent"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${gas.color}`} />
-                    {gas.label}
-                  </span>
-                  {selectedGas === gas.id && <span className="text-[10px] text-sensor font-bold">ACTIVE</span>}
-                </button>
-              ))}
+                { id: "co2", label: "Carbon Dioxide (CO₂)", color: "bg-red-500", range: "380 - 450 ppm", gradient: "from-red-600 to-red-400" },
+                { id: "ch4", label: "Methane (CH₄)", color: "bg-purple-500", range: "1800 - 2200 ppb", gradient: "from-purple-600 to-purple-400" },
+                { id: "no2", label: "Nitrogen Dioxide (NO₂)", color: "bg-orange-500", range: "0 - 150 ppb", gradient: "from-orange-600 to-orange-400" },
+                { id: "so2", label: "Sulfur Dioxide (SO₂)", color: "bg-pink-500", range: "0 - 80 ppb", gradient: "from-pink-600 to-pink-400" },
+                { id: "co", label: "Carbon Monoxide (CO)", color: "bg-teal-500", range: "50 - 200 ppb", gradient: "from-teal-600 to-teal-400" },
+              ].map((gas) => {
+                const config = gases[gas.id] || { enabled: false, opacity: 0.8 };
+                return (
+                  <div key={gas.id} className="space-y-1.5 p-2 rounded-lg bg-ground-950/40 border border-ground-800/40">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={config.enabled}
+                          onChange={() => toggleGas(gas.id)}
+                          className="accent-sensor h-3 w-3 cursor-pointer"
+                        />
+                        <span className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${gas.color}`} />
+                          <span className={config.enabled ? "text-instrument font-medium" : "text-ground-400"}>{gas.label}</span>
+                        </span>
+                      </label>
+                    </div>
+                    
+                    {config.enabled && (
+                      <div className="space-y-1.5 pl-5 pt-1 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between text-[10px] text-ground-400">
+                          <span>Opacity: {Math.round(config.opacity * 100)}%</span>
+                          <span className="font-mono text-sensor">{gas.range}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.1"
+                          max="1.0"
+                          step="0.05"
+                          value={config.opacity}
+                          onChange={(e) => setGasOpacity(gas.id, parseFloat(e.target.value))}
+                          className="w-full accent-sensor bg-ground-800 h-1 rounded-lg cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className={`h-1.5 w-full rounded bg-gradient-to-r ${gas.gradient}`} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -419,7 +446,6 @@ export default function MapPage() {
               hotspots={hotspots}
               showPlants={showLayers.plants}
               showHotspots={showLayers.heatmap}
-              selectedGas={selectedGas}
               selectedMode={visualizationMode}
               activeBasemap={activeBasemap}
               onSelectFacility={setSelectedFacility}

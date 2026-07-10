@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMapStore } from "@/features/maps/store/map-store";
 import { useSettings } from "@/providers/providers/settings-provider";
 import type { MapHotspot, PlantOut } from "@/types/geo";
-import { Maximize2, Compass, RotateCcw, ZoomIn, ZoomOut, Compass as CompassIcon } from "lucide-react";
+import { Maximize2, Compass, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 
 interface Props {
   plants: PlantOut[];
@@ -21,32 +21,98 @@ interface Props {
   showLayers?: Record<string, boolean>;
 }
 
-function getGasColorHex(gas: string, val: number, confidence: number) {
+interface PlumePoint {
+  lat: number;
+  lon: number;
+  intensity: number;
+  value: number;
+  unit: string;
+}
+
+function hexToRgb(hex: string) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
+}
+
+function getGasColorHex(gas: string, val: number) {
   const normVal = Math.min(1, Math.max(0, val));
   if (gas === "ch4") {
-    if (normVal < 0.3) return "#3b82f6";
-    if (normVal < 0.6) return "#06b6d4";
-    return "#a855f7";
+    if (normVal < 0.3) return "#3b82f6"; // Blue
+    if (normVal < 0.6) return "#06b6d4"; // Cyan
+    return "#a855f7"; // Purple
   }
   if (gas === "no2") {
-    if (normVal < 0.3) return "#facc15";
-    if (normVal < 0.6) return "#f97316";
-    return "#ef4444";
+    if (normVal < 0.3) return "#facc15"; // Yellow
+    if (normVal < 0.6) return "#f97316"; // Orange
+    return "#ef4444"; // Red
   }
   if (gas === "so2") {
-    if (normVal < 0.5) return "#8b5cf6";
-    return "#ec4899";
+    if (normVal < 0.5) return "#8b5cf6"; // Violet
+    return "#ec4899"; // Pink
   }
   if (gas === "co") {
-    if (normVal < 0.5) return "#14b8a6";
-    return "#f97316";
+    if (normVal < 0.5) return "#14b8a6"; // Teal
+    return "#f97316"; // Orange
   }
-  if (normVal < 0.2) return "#22c55e";
-  if (normVal < 0.4) return "#eab308";
-  if (normVal < 0.6) return "#f97316";
-  if (normVal < 0.8) return "#ef4444";
+  // co2
+  if (normVal < 0.2) return "#22c55e"; // Green
+  if (normVal < 0.4) return "#eab308"; // Yellow
+  if (normVal < 0.6) return "#f97316"; // Orange
+  if (normVal < 0.8) return "#ef4444"; // Red
   return "#7f1d1d";
 }
+
+// Generates dynamic plumes for each gas type (offset from the main hotspots)
+const getGasPlumes = (gas: string, baseHotspots: MapHotspot[]): PlumePoint[] => {
+  return baseHotspots.map((h, i) => {
+    let latOffset = 0;
+    let lonOffset = 0;
+    let valueMultiplier = 1.0;
+    let unit = "ppm";
+
+    if (gas === "ch4") {
+      latOffset = 0.02 * Math.sin(i);
+      lonOffset = 0.02 * Math.cos(i);
+      valueMultiplier = 1950.0;
+      unit = "ppb";
+    } else if (gas === "no2") {
+      latOffset = -0.015 * Math.cos(i * 1.5);
+      lonOffset = 0.015 * Math.sin(i * 1.5);
+      valueMultiplier = 95.0;
+      unit = "ppb";
+    } else if (gas === "so2") {
+      latOffset = 0.03 * Math.sin(i * 2);
+      lonOffset = -0.01 * Math.cos(i * 2);
+      valueMultiplier = 45.0;
+      unit = "ppb";
+    } else if (gas === "co") {
+      latOffset = -0.01 * Math.cos(i * 0.5);
+      lonOffset = -0.02 * Math.sin(i * 0.5);
+      valueMultiplier = 120.0;
+      unit = "ppb";
+    } else {
+      // co2
+      latOffset = 0;
+      lonOffset = 0;
+      valueMultiplier = 415.0;
+      unit = "ppm";
+    }
+
+    return {
+      lat: h.lat + latOffset,
+      lon: h.lon + lonOffset,
+      intensity: h.intensity,
+      value: h.intensity * valueMultiplier,
+      unit,
+    };
+  });
+};
 
 export default function EmissionMap({
   plants,
@@ -70,7 +136,7 @@ export default function EmissionMap({
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lon: number } | null>(null);
 
   // Zustand Store binding
-  const { camera, setCamera, selectedFacility, setSelectedFacility } = useMapStore();
+  const { camera, setCamera, selectedFacility, setSelectedFacility, gases } = useMapStore();
 
   // Load Cesium globally
   useEffect(() => {
@@ -200,7 +266,6 @@ export default function EmissionMap({
       provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       });
-      // Overlay streets/labels on hybrid
       viewer.imageryLayers.addImageryProvider(provider);
       provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
@@ -210,7 +275,6 @@ export default function EmissionMap({
         url: "https://a.tile.openstreetmap.org/",
       });
     } else {
-      // "dark" / "terrain"
       provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
       });
@@ -218,7 +282,6 @@ export default function EmissionMap({
 
     viewer.imageryLayers.addImageryProvider(provider);
 
-    // Dynamic 3D Terrain
     if (activeBasemap === "terrain") {
       viewer.terrainProvider = Cesium.createWorldTerrain();
     } else {
@@ -246,7 +309,6 @@ export default function EmissionMap({
         duration: 2.5,
       });
 
-      // Highlight/open popup
       const entityId = selectedFacility.id ? `plant-point-${selectedFacility.id}` : undefined;
       if (entityId) {
         const ent = viewer.entities.getById(entityId);
@@ -257,7 +319,7 @@ export default function EmissionMap({
     }
   }, [selectedFacility]);
 
-  // Render Cylinders and Contours
+  // Render Multi-Gas plume fields, animated heatmaps, and Gaussian structures
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -295,103 +357,134 @@ export default function EmissionMap({
       });
     }
 
-    // 2. Render Hotspots as animated 3D extruded columns
+    // 2. Render Plumes for each active gas
     if (showHotspots && showLayers.heatmap) {
-      hotspots.forEach((h, idx) => {
-        const valueNorm = Math.min(1, (h.emission_tonnes_per_year || 4500) / 6000);
-        const hotspotConfidence = Math.round((h.intensity ?? 0.94) * 100);
-        const colorHex = getGasColorHex(selectedGas, valueNorm, hotspotConfidence);
-        const color = Cesium.Color.fromCssColorString(colorHex);
-        const confidenceAlpha = Math.min(1, Math.max(0.2, hotspotConfidence / 100));
+      const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
 
-        const baseHeight = 50000 * valueNorm;
+      activeGasKeys.forEach((gasKey) => {
+        const config = gases[gasKey];
+        const plumes = getGasPlumes(gasKey, hotspots);
 
-        let timeOffset = idx * 0.5;
-        const pulseHeightProperty = new Cesium.CallbackProperty(() => {
-          const time = viewer.clock.currentTime.secondsOfDay;
-          const factor = 1.0 + 0.15 * Math.sin(time * 2.0 + timeOffset);
-          return baseHeight * factor;
-        }, false);
+        plumes.forEach((plume, idx) => {
+          const valueNorm = Math.min(1, plume.intensity);
+          const colorHex = getGasColorHex(gasKey, valueNorm);
+          const color = Cesium.Color.fromCssColorString(colorHex);
+          const baseHeight = 50000 * valueNorm;
+          const timeOffset = idx * 0.5;
 
-        if (selectedMode === "heatmap") {
-          viewer.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat),
-            ellipse: {
-              semiMajorAxis: h.radius_m || 5000,
-              semiMinorAxis: h.radius_m || 5000,
-              material: color.withAlpha(confidenceAlpha * 0.25),
-              outline: false,
-            },
-            properties: {
-              metadata: {
-                name: `Detected Hotspot #${idx + 1}`,
-                industry: "Industrial Facility Anomaly",
-                country: "India",
-                lat: h.lat,
-                lon: h.lon,
-                co2: h.emission_tonnes_per_year ? h.emission_tonnes_per_year.toLocaleString() : "4,760",
-                confidence: `${hotspotConfidence}%`,
-                satellite: "Sentinel-5P",
-                dataset: h.image_filename || "scene.tif",
+          // Pulse Height property for 3D Volume animation
+          const pulseHeightProperty = new Cesium.CallbackProperty(() => {
+            const time = viewer.clock.currentTime.secondsOfDay;
+            const factor = 1.0 + 0.15 * Math.sin(time * 2.0 + timeOffset);
+            return baseHeight * factor;
+          }, false);
+
+          const entityMeta = {
+            name: `Detected ${gasKey.toUpperCase()} Plume`,
+            industry: `Greenhouse Gas Source: ${gasKey.toUpperCase()}`,
+            country: "India",
+            lat: plume.lat,
+            lon: plume.lon,
+            co2: `${plume.value.toFixed(1)} ${plume.unit}`,
+            confidence: `${Math.round(plume.intensity * 100)}%`,
+            satellite: "Sentinel-5P",
+            dataset: "Prediction Scene",
+          };
+
+          if (selectedMode === "heatmap") {
+            // Gaussian / Radial Gradient Plume Canvas
+            const plumeCanvas = document.createElement("canvas");
+            plumeCanvas.width = 128;
+            plumeCanvas.height = 128;
+            const ctx = plumeCanvas.getContext("2d");
+
+            const animCanvasProperty = new Cesium.CallbackProperty(() => {
+              if (ctx) {
+                ctx.clearRect(0, 0, 128, 128);
+                const time = viewer.clock.currentTime.secondsOfDay;
+                const pulseFactor = 1.0 + 0.1 * Math.sin(time * 2.5 + timeOffset);
+                const rgb = hexToRgb(colorHex) || { r: 250, g: 100, b: 100 };
+
+                // Draw kernel Gaussian gradient distribution
+                const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 60 * pulseFactor);
+                grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})`);
+                grad.addColorStop(0.35, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.5})`);
+                grad.addColorStop(0.7, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.15})`);
+                grad.addColorStop(1.0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(64, 64, 64, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+              return plumeCanvas;
+            }, false);
+
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
+              ellipse: {
+                semiMajorAxis: 18000.0,
+                semiMinorAxis: 18000.0,
+                material: new Cesium.ImageMaterialProperty({
+                  image: animCanvasProperty,
+                  transparent: true,
+                }),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
               },
-            },
-          });
-        } else {
-          viewer.entities.add({
-            id: `hotspot-col-${idx}`,
-            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat),
-            cylinder: {
-              length: pulseHeightProperty,
-              topRadius: 3500.0,
-              bottomRadius: 3500.0,
-              material: color.withAlpha(confidenceAlpha * 0.6),
-              outline: true,
-              outlineColor: color,
-              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-            },
-            properties: {
-              metadata: {
-                name: `Detected Hotspot #${idx + 1}`,
-                industry: "Industrial Facility Anomaly",
-                country: "India",
-                lat: h.lat,
-                lon: h.lon,
-                co2: h.emission_tonnes_per_year ? h.emission_tonnes_per_year.toLocaleString() : "4,760",
-                confidence: `${hotspotConfidence}%`,
-                satellite: "Sentinel-5P",
-                dataset: h.image_filename || "scene.tif",
+              properties: {
+                metadata: entityMeta,
               },
-            },
-          });
-        }
-
-        if (selectedMode === "contours") {
-          viewer.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat, 10),
-            ellipse: {
-              semiMajorAxis: 8000.0,
-              semiMinorAxis: 8000.0,
-              material: Cesium.Color.TRANSPARENT,
-              outline: true,
-              outlineColor: color.withAlpha(0.9),
-              outlineWidth: 3.0,
-            },
-          });
-          viewer.entities.add({
-            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat, 10),
-            ellipse: {
-              semiMajorAxis: 15000.0,
-              semiMinorAxis: 15000.0,
-              material: Cesium.Color.TRANSPARENT,
-              outline: true,
-              outlineColor: color.withAlpha(0.4),
-              outlineWidth: 1.5,
-            },
-          });
-        }
+            });
+          } else if (selectedMode === "contours") {
+            // Isolines / Contour Rendering
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat, 10),
+              ellipse: {
+                semiMajorAxis: 8000.0,
+                semiMinorAxis: 8000.0,
+                material: Cesium.Color.TRANSPARENT,
+                outline: true,
+                outlineColor: color.withAlpha(config.opacity * 0.95),
+                outlineWidth: 2.5,
+              },
+            });
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat, 10),
+              ellipse: {
+                semiMajorAxis: 16000.0,
+                semiMinorAxis: 16000.0,
+                material: Cesium.Color.TRANSPARENT,
+                outline: true,
+                outlineColor: color.withAlpha(config.opacity * 0.45),
+                outlineWidth: 1.5,
+              },
+              properties: {
+                metadata: entityMeta,
+              },
+            });
+          } else {
+            // 3D Volume Column Rendering
+            viewer.entities.add({
+              id: `gas-plume-col-${gasKey}-${idx}`,
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
+              cylinder: {
+                length: pulseHeightProperty,
+                topRadius: 3000.0,
+                bottomRadius: 3000.0,
+                material: color.withAlpha(config.opacity * 0.65),
+                outline: true,
+                outlineColor: color,
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              },
+              properties: {
+                metadata: entityMeta,
+              },
+            });
+          }
+        });
       });
     }
-  }, [plants, hotspots, showPlants, showHotspots, selectedGas, selectedMode, showLayers]);
+  }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases]);
 
   // Handle Drawings / Polygon Measure tools
   useEffect(() => {
@@ -462,7 +555,6 @@ export default function EmissionMap({
     };
   }, [drawingMode]);
 
-  // Camera navigation triggers
   const handleZoom = (zoomIn: boolean) => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -515,10 +607,10 @@ export default function EmissionMap({
       
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Floating Control Elements */}
+      {/* Control Overlays */}
       {cesiumReady && (
         <>
-          {/* Compass Dial Indicator (Dynamic rotation based on camera bearing) */}
+          {/* Compass Dial Dial rotated dynamically with heading */}
           <div className="absolute top-4 left-4 bg-ground-900/90 border border-ground-700/80 rounded-xl p-2.5 flex items-center justify-center shadow-2xl z-10 select-none">
             <Compass
               className="h-7 w-7 text-sensor transition-transform duration-100"
@@ -526,7 +618,7 @@ export default function EmissionMap({
             />
           </div>
 
-          {/* Mouse Coordinates Readout overlay */}
+          {/* Mouse coordinates readout */}
           <div className="absolute bottom-4 left-4 bg-ground-900/95 border border-ground-700/80 rounded-lg px-3 py-1.5 text-[10px] font-mono text-instrument shadow-lg z-10 select-none">
             {mouseCoords ? (
               <span>
@@ -545,7 +637,7 @@ export default function EmissionMap({
             </span>
           </div>
 
-          {/* Camera navigation panel buttons (zoom, tilt, reset, fullscreen) */}
+          {/* Camera navigation panel buttons */}
           <div className="absolute bottom-4 right-20 bg-ground-900/90 border border-ground-700/80 rounded-xl p-1.5 flex flex-col gap-1 z-10 shadow-2xl">
             <button
               onClick={() => handleZoom(true)}
