@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useMapStore } from "@/features/maps/store/map-store";
 import { useSettings } from "@/providers/providers/settings-provider";
 import type { MapHotspot, PlantOut } from "@/types/geo";
+import { Maximize2, Compass, RotateCcw, ZoomIn, ZoomOut, Compass as CompassIcon } from "lucide-react";
 
 interface Props {
   plants: PlantOut[];
@@ -19,37 +21,31 @@ interface Props {
   showLayers?: Record<string, boolean>;
 }
 
-// Gas Color Palettes helper
 function getGasColorHex(gas: string, val: number, confidence: number) {
   const normVal = Math.min(1, Math.max(0, val));
   if (gas === "ch4") {
-    // Blue -> Cyan -> Purple
-    if (normVal < 0.3) return "#3b82f6"; // blue
-    if (normVal < 0.6) return "#06b6d4"; // cyan
-    return "#a855f7"; // purple
+    if (normVal < 0.3) return "#3b82f6";
+    if (normVal < 0.6) return "#06b6d4";
+    return "#a855f7";
   }
   if (gas === "no2") {
-    // Yellow -> Orange -> Red
-    if (normVal < 0.3) return "#facc15"; // yellow
-    if (normVal < 0.6) return "#f97316"; // orange
-    return "#ef4444"; // red
+    if (normVal < 0.3) return "#facc15";
+    if (normVal < 0.6) return "#f97316";
+    return "#ef4444";
   }
   if (gas === "so2") {
-    // Purple -> Pink
-    if (normVal < 0.5) return "#8b5cf6"; // purple
-    return "#ec4899"; // pink
+    if (normVal < 0.5) return "#8b5cf6";
+    return "#ec4899";
   }
   if (gas === "co") {
-    // Teal -> Orange
-    if (normVal < 0.5) return "#14b8a6"; // teal
-    return "#f97316"; // orange
+    if (normVal < 0.5) return "#14b8a6";
+    return "#f97316";
   }
-  // Default: co2 (Green -> Yellow -> Orange -> Red -> Dark Red)
-  if (normVal < 0.2) return "#22c55e"; // green
-  if (normVal < 0.4) return "#eab308"; // yellow
-  if (normVal < 0.6) return "#f97316"; // orange
-  if (normVal < 0.8) return "#ef4444"; // red
-  return "#7f1d1d"; // dark red
+  if (normVal < 0.2) return "#22c55e";
+  if (normVal < 0.4) return "#eab308";
+  if (normVal < 0.6) return "#f97316";
+  if (normVal < 0.8) return "#ef4444";
+  return "#7f1d1d";
 }
 
 export default function EmissionMap({
@@ -67,11 +63,16 @@ export default function EmissionMap({
   showLayers = { plants: true, heatmap: true },
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const [cesiumReady, setCesiumReady] = useState(false);
   const [measurementResult, setMeasurementResult] = useState<string | null>(null);
+  const [mouseCoords, setMouseCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-  // Load Cesium globally from window
+  // Zustand Store binding
+  const { camera, setCamera, selectedFacility, setSelectedFacility } = useMapStore();
+
+  // Load Cesium globally
   useEffect(() => {
     let interval: NodeJS.Timeout;
     const checkCesium = () => {
@@ -91,14 +92,14 @@ export default function EmissionMap({
 
     const Cesium = (window as any).Cesium;
 
-    // Use dark style basemap template by default
-    const darkBasemapProvider = new Cesium.UrlTemplateImageryProvider({
+    // Use dark basemap initially
+    const initialBasemapProvider = new Cesium.UrlTemplateImageryProvider({
       url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
       attribution: "&copy; OpenStreetMap &copy; CARTO",
     });
 
     const viewer = new Cesium.Viewer(containerRef.current, {
-      imageryProvider: darkBasemapProvider,
+      imageryProvider: initialBasemapProvider,
       terrainProvider: undefined,
       baseLayerPicker: false,
       geocoder: false,
@@ -113,16 +114,17 @@ export default function EmissionMap({
       scene3DOnly: false,
     });
 
-    // Make Cesium render dark sky background
     viewer.scene.skyBox.show = false;
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#09090b");
 
-    // Camera settings
+    // Initialize camera position from Zustand store
+    const storeCam = useMapStore.getState().camera;
+    const targetHeight = (6378137 * Math.PI) / Math.pow(2, storeCam.zoom);
     viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(79.5, 22.5, 8000000.0), // Center on India
+      destination: Cesium.Cartesian3.fromDegrees(storeCam.lon, storeCam.lat, targetHeight),
       orientation: {
-        heading: 0,
-        pitch: Cesium.Math.toRadians(-90),
+        heading: Cesium.Math.toRadians(storeCam.bearing),
+        pitch: Cesium.Math.toRadians(storeCam.pitch),
         roll: 0,
       },
     });
@@ -137,20 +139,51 @@ export default function EmissionMap({
         const metadata = pickedObject.id.properties?.metadata?.getValue();
         if (metadata) {
           onSelectFacility(metadata);
+          setSelectedFacility(metadata);
         }
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+    // Mouse Move handler for coordinates
+    const mouseHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    mouseHandler.setInputAction((movement: any) => {
+      const cartesian = viewer.camera.pickEllipsoid(movement.endPosition, viewer.scene.globe.ellipsoid);
+      if (cartesian) {
+        const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+        const lat = Cesium.Math.toDegrees(cartographic.latitude);
+        const lon = Cesium.Math.toDegrees(cartographic.longitude);
+        setMouseCoords({ lat, lon });
+      } else {
+        setMouseCoords(null);
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Camera listener to sync state to Zustand store
+    viewer.camera.percentageChanged = 0.05;
+    viewer.camera.changed.addEventListener(() => {
+      const cam = viewer.camera;
+      const carto = Cesium.Cartographic.fromCartesian(cam.position);
+      if (carto) {
+        const lat = Cesium.Math.toDegrees(carto.latitude);
+        const lon = Cesium.Math.toDegrees(carto.longitude);
+        const zoom = Math.max(1, Math.min(20, Math.round(Math.log2(6378137 * Math.PI / carto.height))));
+        const pitch = Cesium.Math.toDegrees(cam.pitch);
+        const bearing = Cesium.Math.toDegrees(cam.heading);
+        setCamera({ lat, lon, zoom, pitch, bearing });
+      }
+    });
+
     return () => {
       handler.destroy();
+      mouseHandler.destroy();
       if (viewerRef.current) {
         viewerRef.current.destroy();
         viewerRef.current = null;
       }
     };
-  }, [cesiumReady, onSelectFacility]);
+  }, [cesiumReady, onSelectFacility, setCamera, setSelectedFacility]);
 
-  // Update Basemaps
+  // Update Basemaps instantly
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -159,16 +192,25 @@ export default function EmissionMap({
     viewer.imageryLayers.removeAll();
 
     let provider;
-    if (activeBasemap === "satellite" || activeBasemap === "hybrid") {
+    if (activeBasemap === "satellite") {
       provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      });
+    } else if (activeBasemap === "hybrid") {
+      provider = new Cesium.UrlTemplateImageryProvider({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      });
+      // Overlay streets/labels on hybrid
+      viewer.imageryLayers.addImageryProvider(provider);
+      provider = new Cesium.UrlTemplateImageryProvider({
+        url: "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
       });
     } else if (activeBasemap === "osm") {
       provider = new Cesium.OpenStreetMapImageryProvider({
         url: "https://a.tile.openstreetmap.org/",
       });
     } else {
-      // "dark"
+      // "dark" / "terrain"
       provider = new Cesium.UrlTemplateImageryProvider({
         url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
       });
@@ -176,7 +218,7 @@ export default function EmissionMap({
 
     viewer.imageryLayers.addImageryProvider(provider);
 
-    // Dynamic Terrain switching
+    // Dynamic 3D Terrain
     if (activeBasemap === "terrain") {
       viewer.terrainProvider = Cesium.createWorldTerrain();
     } else {
@@ -184,7 +226,38 @@ export default function EmissionMap({
     }
   }, [activeBasemap]);
 
-  // Render 3D Cylinders, Heatmaps, and Plant Markers
+  // Fly to selected facility when updated from search/externally
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !selectedFacility) return;
+
+    const Cesium = (window as any).Cesium;
+    const lat = selectedFacility.lat || selectedFacility.latitude;
+    const lon = selectedFacility.lon || selectedFacility.longitude;
+
+    if (lat != null && lon != null) {
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(lon, lat, 200000.0),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-45.0),
+          roll: 0.0,
+        },
+        duration: 2.5,
+      });
+
+      // Highlight/open popup
+      const entityId = selectedFacility.id ? `plant-point-${selectedFacility.id}` : undefined;
+      if (entityId) {
+        const ent = viewer.entities.getById(entityId);
+        if (ent) {
+          viewer.selectedEntity = ent;
+        }
+      }
+    }
+  }, [selectedFacility]);
+
+  // Render Cylinders and Contours
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -195,29 +268,27 @@ export default function EmissionMap({
     // 1. Render Plants
     if (showPlants && showLayers.plants) {
       plants.forEach((p) => {
-        const strong = (p.co2_enhancement_ppm ?? 0) > (p.co2_bg_std_ppm ?? 0.5);
-        const markerColor = strong ? Cesium.Color.GOLD.withAlpha(0.7) : Cesium.Color.SPRINGGREEN.withAlpha(0.6);
-
         viewer.entities.add({
-          id: `plant-${p.id}`,
-          position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 100),
+          id: `plant-point-${p.id}`,
+          position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
           point: {
-            pixelSize: 8,
-            color: markerColor,
+            pixelSize: 10,
+            color: Cesium.Color.fromCssColorString("#10b981"),
             outlineColor: Cesium.Color.BLACK,
-            outlineWidth: 1.5,
+            outlineWidth: 2,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           },
           properties: {
             metadata: {
               name: p.name,
-              industry: p.fuel_type || "Power Gen",
-              country: p.country || "India",
+              industry: p.fuel_type || "Energy Production",
+              country: p.country,
               lat: p.lat,
               lon: p.lon,
-              co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "n/a",
+              co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—",
               confidence: p.co2_soundings ? "91%" : "n/a",
               satellite: "Sentinel-5P",
-              dataset: "plant_results.json",
+              dataset: "Sentinel-5P scene",
             },
           },
         });
@@ -235,24 +306,21 @@ export default function EmissionMap({
 
         const baseHeight = 50000 * valueNorm;
 
-        // Dynamic pulsing callback
         let timeOffset = idx * 0.5;
         const pulseHeightProperty = new Cesium.CallbackProperty(() => {
           const time = viewer.clock.currentTime.secondsOfDay;
-          const pulse = Math.sin(time * 2 + timeOffset) * 0.15 + 0.85; // pulse size
-          return baseHeight * pulse;
+          const factor = 1.0 + 0.15 * Math.sin(time * 2.0 + timeOffset);
+          return baseHeight * factor;
         }, false);
 
-        // 3D Volume
-        if (selectedMode === "volume3d") {
+        if (selectedMode === "heatmap") {
           viewer.entities.add({
-            id: `hotspot-vol-${idx}`,
-            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat, baseHeight / 2),
-            ellipsoid: {
-              radii: new Cesium.Cartesian3(5000, 5000, baseHeight / 2),
+            position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat),
+            ellipse: {
+              semiMajorAxis: h.radius_m || 5000,
+              semiMinorAxis: h.radius_m || 5000,
               material: color.withAlpha(confidenceAlpha * 0.25),
-              outline: true,
-              outlineColor: color,
+              outline: false,
             },
             properties: {
               metadata: {
@@ -269,7 +337,6 @@ export default function EmissionMap({
             },
           });
         } else {
-          // Standard Extruded Column
           viewer.entities.add({
             id: `hotspot-col-${idx}`,
             position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat),
@@ -298,7 +365,6 @@ export default function EmissionMap({
           });
         }
 
-        // Draw Contours
         if (selectedMode === "contours") {
           viewer.entities.add({
             position: Cesium.Cartesian3.fromDegrees(h.lon, h.lat, 10),
@@ -396,8 +462,50 @@ export default function EmissionMap({
     };
   }, [drawingMode]);
 
+  // Camera navigation triggers
+  const handleZoom = (zoomIn: boolean) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const factor = zoomIn ? 0.6 : 1.6;
+    viewer.camera.zoomIn(viewer.camera.positionCartographic.height * (1 - factor));
+  };
+
+  const handleTilt = (tiltUp: boolean) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const Cesium = (window as any).Cesium;
+    const angle = Cesium.Math.toRadians(tiltUp ? 5 : -5);
+    viewer.camera.lookUp(angle);
+  };
+
+  const handleResetCamera = () => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const Cesium = (window as any).Cesium;
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(80.0, 24.0, 8000000.0),
+      orientation: {
+        heading: 0,
+        pitch: Cesium.Math.toRadians(-90),
+        roll: 0,
+      },
+      duration: 2.0,
+    });
+  };
+
+  const toggleFullscreen = () => {
+    if (!mapWrapperRef.current) return;
+    if (!document.fullscreenElement) {
+      mapWrapperRef.current.requestFullscreen().catch((err) => {
+        alert(`Error enabling fullscreen: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   return (
-    <div className="relative w-full h-[40rem] rounded-xl overflow-hidden border border-ground-700 bg-ground-950">
+    <div ref={mapWrapperRef} className="relative w-full h-[40rem] rounded-xl overflow-hidden border border-ground-700 bg-ground-950">
       {!cesiumReady && (
         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3 z-15 bg-ground-950/80 backdrop-blur-sm text-sm text-ground-400">
           <span className="h-6 w-6 rounded-full border-2 border-dashed border-sensor animate-spin" />
@@ -407,8 +515,88 @@ export default function EmissionMap({
       
       <div ref={containerRef} className="w-full h-full" />
 
+      {/* Floating Control Elements */}
+      {cesiumReady && (
+        <>
+          {/* Compass Dial Indicator (Dynamic rotation based on camera bearing) */}
+          <div className="absolute top-4 left-4 bg-ground-900/90 border border-ground-700/80 rounded-xl p-2.5 flex items-center justify-center shadow-2xl z-10 select-none">
+            <Compass
+              className="h-7 w-7 text-sensor transition-transform duration-100"
+              style={{ transform: `rotate(${-camera.bearing}deg)` }}
+            />
+          </div>
+
+          {/* Mouse Coordinates Readout overlay */}
+          <div className="absolute bottom-4 left-4 bg-ground-900/95 border border-ground-700/80 rounded-lg px-3 py-1.5 text-[10px] font-mono text-instrument shadow-lg z-10 select-none">
+            {mouseCoords ? (
+              <span>
+                LAT: {mouseCoords.lat.toFixed(4)}° &middot; LON: {mouseCoords.lon.toFixed(4)}°
+              </span>
+            ) : (
+              <span className="text-ground-500">Out of bounds</span>
+            )}
+          </div>
+
+          {/* Scale context overlay bar */}
+          <div className="absolute bottom-12 left-4 flex flex-col gap-1 z-10 select-none">
+            <div className="w-24 h-1.5 border-b-2 border-l-2 border-r-2 border-instrument" />
+            <span className="text-[8px] font-mono text-ground-400 uppercase tracking-widest pl-1">
+              Zoom level: {camera.zoom}
+            </span>
+          </div>
+
+          {/* Camera navigation panel buttons (zoom, tilt, reset, fullscreen) */}
+          <div className="absolute bottom-4 right-20 bg-ground-900/90 border border-ground-700/80 rounded-xl p-1.5 flex flex-col gap-1 z-10 shadow-2xl">
+            <button
+              onClick={() => handleZoom(true)}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument cursor-pointer"
+              title="Zoom In"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleZoom(false)}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument cursor-pointer"
+              title="Zoom Out"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            <div className="h-px bg-ground-700 my-0.5" />
+            <button
+              onClick={() => handleTilt(true)}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument text-xs font-semibold cursor-pointer"
+              title="Tilt Up"
+            >
+              ▲
+            </button>
+            <button
+              onClick={() => handleTilt(false)}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument text-xs font-semibold cursor-pointer"
+              title="Tilt Down"
+            >
+              ▼
+            </button>
+            <div className="h-px bg-ground-700 my-0.5" />
+            <button
+              onClick={handleResetCamera}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument cursor-pointer"
+              title="Reset Camera Orientation"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument cursor-pointer"
+              title="Toggle Fullscreen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          </div>
+        </>
+      )}
+
       {measurementResult && (
-        <div className="absolute top-4 left-4 bg-ground-900/90 border border-ground-700 px-3 py-1.5 rounded-lg text-xs font-mono text-sensor select-none shadow-lg z-10 animate-pulse">
+        <div className="absolute top-4 right-52 bg-ground-900/90 border border-ground-700 px-3 py-1.5 rounded-lg text-xs font-mono text-sensor select-none shadow-lg z-10 animate-pulse">
           {measurementResult}
         </div>
       )}

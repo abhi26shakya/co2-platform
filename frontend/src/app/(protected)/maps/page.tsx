@@ -1,6 +1,7 @@
 "use client";
 
 import { useHotspots, usePlants } from "@/features/maps/hooks/use-geo";
+import { useMapStore } from "@/features/maps/store/map-store";
 import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
 import Script from "next/script";
@@ -44,12 +45,17 @@ export default function MapPage() {
   const { data: plants = [] } = usePlants();
   const { data: hotspots = [] } = useHotspots();
 
-  // Selected state
-  const [selectedFacility, setSelectedFacility] = useState<any>(null);
+  // Zustand Store bindings
+  const {
+    activeBasemap,
+    setActiveBasemap,
+    selectedGas,
+    setSelectedGas,
+    selectedFacility,
+    setSelectedFacility
+  } = useMapStore();
 
-  // Basemap & Layer states
-  const [activeBasemap, setActiveBasemap] = useState("dark");
-  const [selectedGas, setSelectedGas] = useState("co2");
+  // Map settings and local states
   const [visualizationMode, setVisualizationMode] = useState("volume3d");
   const [drawingMode, setDrawingMode] = useState("none");
   const [showLayers, setShowLayers] = useState({
@@ -69,6 +75,7 @@ export default function MapPage() {
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
 
   // Comparison Mode
   const [comparisonMode, setComparisonMode] = useState(false);
@@ -97,12 +104,7 @@ export default function MapPage() {
     return () => clearInterval(interval);
   }, [isTimelinePlaying, timelinePeriod]);
 
-  // Handle facility pick callback
-  const handleSelectFacility = (fac: any) => {
-    setSelectedFacility(fac);
-  };
-
-  // Drawing mode action triggers
+  // Handle drawing mode action triggers
   const handleDrawingModeChange = (mode: string) => {
     setDrawingMode(drawingMode === mode ? "none" : mode);
   };
@@ -120,16 +122,45 @@ export default function MapPage() {
     setShareLinkOpen(true);
   };
 
-  // Filters hotspots by search query
-  const filteredHotspots = hotspots.filter((h) => {
-    if (!searchQuery) return true;
+  // Combined search results filtering
+  const searchResults = searchQuery.trim().length > 0 ? [
+    ...plants.map(p => ({
+      type: "plant",
+      id: p.id,
+      name: p.name,
+      country: p.country,
+      details: `${p.fuel_type || "Energy"} · ${p.capacity_mw || 0}MW`,
+      lat: p.lat,
+      lon: p.lon,
+      industry: p.fuel_type || "Energy Production",
+      co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—",
+      confidence: p.co2_soundings ? "91%" : "n/a",
+      satellite: "Sentinel-5P",
+    })),
+    ...hotspots.map((h, i) => ({
+      type: "hotspot",
+      id: `hotspot-${i}`,
+      name: `Detected Hotspot #${i + 1}`,
+      country: "India",
+      details: `Anomaly · ${(h.intensity * 100).toFixed(0)}% confidence`,
+      lat: h.lat,
+      lon: h.lon,
+      industry: "Industrial Facility Anomaly",
+      co2: h.emission_tonnes_per_year ? h.emission_tonnes_per_year.toLocaleString() : "4,760",
+      confidence: `${(h.intensity * 100).toFixed(0)}%`,
+      satellite: "Sentinel-5P",
+      dataset: h.image_filename,
+    }))
+  ].filter(item => {
     const query = searchQuery.toLowerCase().trim();
     return (
-      h.image_filename.toLowerCase().includes(query) ||
-      h.lat.toFixed(4).includes(query) ||
-      h.lon.toFixed(4).includes(query)
+      item.name.toLowerCase().includes(query) ||
+      item.country.toLowerCase().includes(query) ||
+      item.details.toLowerCase().includes(query) ||
+      item.lat.toFixed(4).includes(query) ||
+      item.lon.toFixed(4).includes(query)
     );
-  });
+  }).slice(0, 5) : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -209,19 +240,53 @@ export default function MapPage() {
             </div>
           </Card>
 
-          {/* Search bar inside control panel */}
-          <Card className="p-3 bg-ground-900/40 border-ground-700/80">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ground-400" />
-              <input
-                type="text"
-                placeholder="Search hotspots, lat, lon..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-ground-950 border border-ground-700/80 rounded-lg text-xs placeholder-ground-555 focus:outline-none focus:border-ground-400 text-instrument"
-              />
-            </div>
-          </Card>
+          {/* Interactive Search Box with matches overlay dropdown */}
+          <div className="relative">
+            <Card className="p-3 bg-ground-900/40 border-ground-700/80">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ground-400" />
+                <input
+                  type="text"
+                  placeholder="Search facility, city, lat, lon..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSearchFocused(true);
+                  }}
+                  onFocus={() => setSearchFocused(true)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-ground-950 border border-ground-700/80 rounded-lg text-xs placeholder-ground-555 focus:outline-none focus:border-ground-400 text-instrument"
+                />
+              </div>
+            </Card>
+
+            {/* Results Dropdown */}
+            {searchFocused && searchResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-ground-950 border border-ground-700 rounded-lg shadow-2xl z-20 overflow-hidden divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">
+                {searchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    onMouseDown={() => {
+                      setSelectedFacility(result);
+                      setSearchQuery(result.name);
+                      setSearchFocused(false);
+                    }}
+                    className="w-full text-left p-3 hover:bg-ground-900 transition-colors flex flex-col gap-0.5 cursor-pointer"
+                  >
+                    <span className="text-xs font-semibold text-instrument">{result.name}</span>
+                    <div className="flex items-center justify-between text-[10px] text-ground-400 font-mono">
+                      <span>{result.details}</span>
+                      <span>{result.lat.toFixed(3)}, {result.lon.toFixed(3)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            {/* Click outside closer helper */}
+            {searchFocused && (
+              <div className="fixed inset-0 z-10" onClick={() => setSearchFocused(false)} />
+            )}
+          </div>
 
           {/* Gas Layers Selector */}
           <Card className="p-4 bg-ground-900/40 border-ground-700/80 space-y-3">
@@ -351,13 +416,13 @@ export default function MapPage() {
           <div className="relative">
             <EmissionMap
               plants={plants}
-              hotspots={filteredHotspots}
+              hotspots={hotspots}
               showPlants={showLayers.plants}
               showHotspots={showLayers.heatmap}
               selectedGas={selectedGas}
               selectedMode={visualizationMode}
               activeBasemap={activeBasemap}
-              onSelectFacility={handleSelectFacility}
+              onSelectFacility={setSelectedFacility}
               drawingMode={drawingMode}
               comparisonMode={comparisonMode}
               timelineDate={timelineTicks[timelinePeriod][sliderIndex]}
