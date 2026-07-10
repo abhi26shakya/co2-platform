@@ -30,6 +30,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
+import { BarChart, Bar, ResponsiveContainer, XAxis, Tooltip } from "recharts";
 
 // Cesium loads on client and requires script files in head
 const EmissionMap = dynamic(() => import("@/features/maps/components/map/emission-map"), {
@@ -44,6 +45,45 @@ const EmissionMap = dynamic(() => import("@/features/maps/components/map/emissio
 export default function MapPage() {
   const { data: plants = [] } = usePlants();
   const { data: hotspots = [] } = useHotspots();
+
+  // Enhance mock data for industrial facilities
+  const enhancedPlants = plants.map((p, idx) => {
+    const sectors = ["Power Combustion", "Petrochemical Refinery", "Cement Manufacturing", "Steel Processing"];
+    const companies = ["National Thermal Power Corp", "State Oil Refinery", "Universal Cement Ltd", "Global Steel Works"];
+    const gasScenarios = [
+      ["CO₂", "NO₂", "CO"],
+      ["CO₂", "CH₄"],
+      ["CO₂", "SO₂"],
+      ["CO₂", "NO₂", "SO₂", "CO"],
+    ];
+    const trends = ["+2.4% (increasing)", "-1.5% (decreasing)", "+0.8% (stable)", "-4.2% (falling)"];
+    
+    const sector = sectors[idx % sectors.length];
+    const company = p.name.includes("Taichung") ? "Taipower" : p.name.includes("Belchatow") ? "PGE Group" : companies[idx % companies.length];
+    const gasesList = p.name.includes("Mundra") ? ["CO₂", "CH₄"] : gasScenarios[idx % gasScenarios.length];
+    const confidenceVal = `${88 + (idx % 11)}%`;
+    const trendVal = trends[idx % trends.length];
+    
+    const baseEmissions = p.co2_enhancement_ppm || (45 + (idx * 5));
+    const historical = [
+      { month: "Nov 25", value: baseEmissions * 0.95 },
+      { month: "Dec 25", value: baseEmissions * 0.98 },
+      { month: "Jan 26", value: baseEmissions * 1.02 },
+      { month: "Feb 26", value: baseEmissions * 1.0 },
+      { month: "Mar 26", value: baseEmissions },
+    ];
+
+    return {
+      ...p,
+      sector,
+      company,
+      predicted_gases: gasesList,
+      confidence: confidenceVal,
+      trend: trendVal,
+      historical,
+      latest_prediction: `${baseEmissions.toFixed(2)} ppm`,
+    };
+  });
 
   // Zustand Store bindings
   const {
@@ -126,18 +166,23 @@ export default function MapPage() {
 
   // Combined search results filtering
   const searchResults = searchQuery.trim().length > 0 ? [
-    ...plants.map(p => ({
+    ...enhancedPlants.map(p => ({
       type: "plant",
       id: p.id,
       name: p.name,
       country: p.country,
-      details: `${p.fuel_type || "Energy"} · ${p.capacity_mw || 0}MW`,
+      details: `${p.sector} · ${p.company}`,
       lat: p.lat,
       lon: p.lon,
-      industry: p.fuel_type || "Energy Production",
+      industry: p.sector,
       co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—",
-      confidence: p.co2_soundings ? "91%" : "n/a",
+      confidence: p.confidence,
       satellite: "Sentinel-5P",
+      company: p.company,
+      predicted_gases: p.predicted_gases,
+      trend: p.trend,
+      historical: p.historical,
+      latest_prediction: p.latest_prediction,
     })),
     ...hotspots.map((h, i) => ({
       type: "hotspot",
@@ -442,7 +487,7 @@ export default function MapPage() {
           {/* Actual 3D map component */}
           <div className="relative">
             <EmissionMap
-              plants={plants}
+              plants={enhancedPlants}
               hotspots={hotspots}
               showPlants={showLayers.plants}
               showHotspots={showLayers.heatmap}
@@ -592,35 +637,88 @@ export default function MapPage() {
                 <div className="space-y-4 text-xs">
                   <div>
                     <h4 className="text-sm font-semibold text-sensor">{selectedFacility.name}</h4>
-                    <span className="text-[10px] text-ground-500">{selectedFacility.industry} · {selectedFacility.country}</span>
+                    <span className="text-[10px] text-ground-500">
+                      {selectedFacility.industry || selectedFacility.sector || "Energy Production"} &middot; {selectedFacility.company || "n/a"}
+                    </span>
                   </div>
 
                   <dl className="grid grid-cols-2 gap-3 text-[11px] border-t border-ground-800 pt-3">
                     <div>
                       <dt className="text-ground-400">Coordinates:</dt>
                       <dd className="font-mono text-instrument mt-0.5">
-                        {selectedFacility.lat.toFixed(4)}, {selectedFacility.lon.toFixed(4)}
+                        {selectedFacility.lat != null ? selectedFacility.lat.toFixed(4) : "—"}, {selectedFacility.lon != null ? selectedFacility.lon.toFixed(4) : "—"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-ground-400">Emission signal:</dt>
+                      <dt className="text-ground-400">Country:</dt>
+                      <dd className="text-instrument mt-0.5">{selectedFacility.country || "India"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-ground-400">Latest Prediction:</dt>
                       <dd className="font-mono text-sensor font-bold mt-0.5">
-                        +{selectedFacility.co2} ppm
+                        {selectedFacility.latest_prediction || `+${selectedFacility.co2} ppm`}
                       </dd>
                     </div>
                     <div>
                       <dt className="text-ground-400">AI Confidence:</dt>
                       <dd className="font-mono text-instrument mt-0.5">
-                        {selectedFacility.confidence}
+                        {selectedFacility.confidence || "91%"}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-ground-400">Imaging Satellite:</dt>
-                      <dd className="text-instrument mt-0.5">
-                        {selectedFacility.satellite}
+                      <dt className="text-ground-400">Predicted Gases:</dt>
+                      <dd className="text-instrument mt-0.5 flex flex-wrap gap-1">
+                        {(selectedFacility.predicted_gases || ["CO₂", "NO₂"]).map((g: string) => (
+                          <span key={g} className="px-1 py-0.5 bg-ground-850 rounded text-[9px] font-mono">{g}</span>
+                        ))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-ground-400">Trend Status:</dt>
+                      <dd className="font-mono text-instrument mt-0.5 flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3 text-red-400" />
+                        <span>{selectedFacility.trend || "+2.4% (increasing)"}</span>
                       </dd>
                     </div>
                   </dl>
+
+                  {/* Responsive Sparkline monthly trend chart */}
+                  <div className="border-t border-ground-800 pt-3 space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Monthly Emission Trend</span>
+                    <div className="h-20 w-full bg-ground-950/40 rounded border border-ground-800/60 p-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={selectedFacility.historical || [
+                          { month: "Jan", value: 390 },
+                          { month: "Feb", value: 405 },
+                          { month: "Mar", value: 412 }
+                        ]}>
+                          <XAxis dataKey="month" stroke="#4b5563" fontSize={7} tickLine={false} axisLine={false} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: 9 }}
+                            labelStyle={{ color: "#a1a1aa" }}
+                          />
+                          <Bar dataKey="value" fill="#10b981" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Historical values list */}
+                  <div className="border-t border-ground-800 pt-3 space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Historical Values Detail</span>
+                    <div className="divide-y divide-ground-850 bg-ground-950/20 rounded border border-ground-800/60 font-mono text-[10px]">
+                      {(selectedFacility.historical || [
+                        { month: "Jan", value: 390 },
+                        { month: "Feb", value: 405 },
+                        { month: "Mar", value: 412 }
+                      ]).map((item: any, i: number) => (
+                        <div key={i} className="flex justify-between p-2">
+                          <span className="text-ground-400">{item.month}</span>
+                          <span className="text-instrument font-semibold">{typeof item.value === "number" ? item.value.toFixed(2) : item.value} ppm</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
                   <div className="flex gap-2 pt-2">
                     <Link
@@ -636,7 +734,7 @@ export default function MapPage() {
                       Open Dataset
                     </button>
                     <button
-                      onClick={() => alert("Emissia Copilot: Signal parameters look consistent with coal power combustion at scale.")}
+                      onClick={() => alert(`Emissia Copilot: ${selectedFacility.name} is operating in sector ${selectedFacility.industry || selectedFacility.sector || "Power Generation"} with confidence ${selectedFacility.confidence || "91%"}.`)}
                       className="px-3 py-2 bg-sensor/10 hover:bg-sensor/20 border border-sensor/25 text-[10px] font-semibold text-sensor rounded-lg flex items-center gap-1.5 cursor-pointer"
                     >
                       <Cpu className="h-3 w-3" /> Ask Copilot

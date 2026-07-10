@@ -391,8 +391,57 @@ export default function EmissionMap({
             dataset: "Prediction Scene",
           };
 
-          if (selectedMode === "heatmap") {
-            // Gaussian / Radial Gradient Plume Canvas
+          if (selectedMode === "markers") {
+            // Render point markers on ground
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
+              point: {
+                pixelSize: 12,
+                color: color.withAlpha(config.opacity),
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              },
+              properties: {
+                metadata: entityMeta,
+              },
+            });
+          } else if (selectedMode === "heatmap") {
+            // Smooth Static Heatmap
+            const plumeCanvas = document.createElement("canvas");
+            plumeCanvas.width = 128;
+            plumeCanvas.height = 128;
+            const ctx = plumeCanvas.getContext("2d");
+            if (ctx) {
+              const rgb = hexToRgb(colorHex) || { r: 250, g: 100, b: 100 };
+              const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 60);
+              grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})`);
+              grad.addColorStop(0.4, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.4})`);
+              grad.addColorStop(0.8, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.1})`);
+              grad.addColorStop(1.0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
+
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              ctx.arc(64, 64, 64, 0, 2 * Math.PI);
+              ctx.fill();
+            }
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
+              ellipse: {
+                semiMajorAxis: 18000.0,
+                semiMinorAxis: 18000.0,
+                material: new Cesium.ImageMaterialProperty({
+                  image: plumeCanvas,
+                  transparent: true,
+                }),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              },
+              properties: {
+                metadata: entityMeta,
+              },
+            });
+          } else if (selectedMode === "animated") {
+            // Animated Gaussian Plumes
             const plumeCanvas = document.createElement("canvas");
             plumeCanvas.width = 128;
             plumeCanvas.height = 128;
@@ -402,10 +451,10 @@ export default function EmissionMap({
               if (ctx) {
                 ctx.clearRect(0, 0, 128, 128);
                 const time = viewer.clock.currentTime.secondsOfDay;
-                const pulseFactor = 1.0 + 0.1 * Math.sin(time * 2.5 + timeOffset);
+                const pulseFactor = 1.0 + 0.15 * Math.sin(time * 2.5 + timeOffset);
                 const rgb = hexToRgb(colorHex) || { r: 250, g: 100, b: 100 };
 
-                // Draw kernel Gaussian gradient distribution
+                // Draw pulsing Gaussian gradient distribution
                 const grad = ctx.createRadialGradient(64, 64, 2, 64, 64, 60 * pulseFactor);
                 grad.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})`);
                 grad.addColorStop(0.35, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity * 0.5})`);
@@ -423,8 +472,8 @@ export default function EmissionMap({
             viewer.entities.add({
               position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
               ellipse: {
-                semiMajorAxis: 18000.0,
-                semiMinorAxis: 18000.0,
+                semiMajorAxis: 20000.0,
+                semiMinorAxis: 20000.0,
                 material: new Cesium.ImageMaterialProperty({
                   image: animCanvasProperty,
                   transparent: true,
@@ -463,7 +512,7 @@ export default function EmissionMap({
               },
             });
           } else {
-            // 3D Volume Column Rendering
+            // 3D Volume Column Rendering (volume3d)
             viewer.entities.add({
               id: `gas-plume-col-${gasKey}-${idx}`,
               position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat),
