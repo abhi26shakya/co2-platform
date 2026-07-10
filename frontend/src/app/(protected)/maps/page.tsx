@@ -391,16 +391,6 @@ export default function MapPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      
-      {/* Stylesheets & Scripts for Cesium */}
-      <link
-        rel="stylesheet"
-        href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css"
-      />
-      <Script
-        src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"
-        strategy="beforeInteractive"
-      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

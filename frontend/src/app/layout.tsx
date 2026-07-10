@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/providers/providers";
+import Script from "next/script";
 
 
 export const metadata: Metadata = {
@@ -13,6 +14,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <head>
+        <link
+          rel="stylesheet"
+          href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css"
+        />
+        <Script
+          src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"
+          strategy="beforeInteractive"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
