@@ -1,6 +1,6 @@
 "use client";
 
-import { useSystemStatus } from "@/hooks/use-system-status";
+import { useSystemStatus } from "@/features/dashboard/hooks/use-system-status";
 import { cn } from "@/lib/utils";
 
 export function StatusPill() {

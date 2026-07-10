@@ -1,6 +1,6 @@
 "use client";
 
-import { useLogout, useUser } from "@/hooks/use-auth";
+import { useLogout, useUser } from "@/features/auth/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
@@ -21,11 +21,11 @@ import { usePathname } from "next/navigation";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, ready: true },
   { href: "/upload", label: "Upload", icon: Upload, ready: true },
-  { href: "/map", label: "Map", icon: Map, ready: true },
+  { href: "/maps", label: "Map", icon: Map, ready: true },
   { href: "/datasets", label: "Datasets", icon: Database, ready: true },
   { href: "/analytics", label: "Analytics", icon: BarChart3, ready: true },
   { href: "/reports", label: "Reports", icon: FileText, ready: true },
-  { href: "/model", label: "Model", icon: Cpu, ready: true },
+  { href: "/ai", label: "Model", icon: Cpu, ready: true },
   { href: "/shared-links", label: "Shared Links", icon: Share2, ready: true },
   { href: "/settings", label: "Settings", icon: Settings, ready: true },
 ];

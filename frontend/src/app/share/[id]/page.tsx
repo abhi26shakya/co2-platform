@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 // Dynamic leaflet map import for client-only rendering
-const EmissionMap = dynamic(() => import("@/components/map/emission-map"), {
+const EmissionMap = dynamic(() => import("@/features/maps/components/map/emission-map"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[24rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
