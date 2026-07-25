@@ -251,28 +251,29 @@ Issues requiring immediate attention.
 
 Issues affecting important functionality.
 
-## KI-001 — `next lint` broken on Next.js 16 / ESLint 9
+## KI-002 — Frontend lint now runs but exposes 95 pre-existing findings
 
-**Classification**: Bug
-**Discovered**: 2026-07-26, while wiring `npm run test` into frontend CI.
-**Description**: `npm run lint` (→ `next lint`) fails immediately with
-`Invalid project directory provided, no such directory: .../frontend/lint`.
-Calling `eslint .` directly (bypassing `next lint`) also fails, with
-`TypeError: Converting circular structure to JSON` inside
-`eslint-config-next`'s FlatCompat shim — an incompatibility between
-ESLint 9's flat config and the installed `eslint-config-next` version.
-**Confirmed pre-existing**: reproduced on a clean `git stash` of `main`
-before any changes in this session, so it is not a regression from the
-new test infrastructure.
-**Impact**: The `frontend` CI job's `lint` step runs before `typecheck`,
-`test`, and `build`; since GitHub Actions stops a job on the first
-failing step, those later steps — including the new Vitest step — may
-not actually be executing in CI on `main` today. Needs verification
-against actual Actions run history.
-**Resolution Plan**: Not fixed in this session (separate scope from
-frontend test infra). Needs either an `eslint-config-next` / ESLint
-version alignment, or migrating the lint step to invoke
-`eslint.config.mjs` directly with a config compatible with ESLint 9.
+**Classification**: Bug / Technical Debt
+**Discovered**: 2026-07-26, immediately after fixing KI-001 (see Resolved
+Issues) — the lint tool had never successfully run before, so these
+findings were invisible until now.
+**Description**: `npm run lint` now executes and correctly exits 1 with
+60 errors / 35 warnings: 43 `@typescript-eslint/no-explicit-any`, 33
+`@typescript-eslint/no-unused-vars`, 11 `react-hooks/set-state-in-effect`,
+2 `react-hooks/refs` (accessing `.current` during render in
+`image-viewer.tsx`), 2 `react-hooks/immutability`, 2 `prefer-const`, 1
+`react-hooks/exhaustive-deps`, 1 `next/no-img-element`.
+**Impact**: `frontend` CI's `lint` step will now correctly fail until
+these are addressed — this is expected/correct behavior of a working
+lint pipeline, not a new regression. The `react-hooks/set-state-in-effect`
+and `react-hooks/refs` findings (`settings-provider.tsx`,
+`image-viewer.tsx`) look like genuine bugs (cascading renders, stale ref
+reads during render) rather than style nits and should be prioritized
+over the `any`/unused-var cleanup.
+**Resolution Plan**: Unscheduled — needs a dedicated cleanup pass
+(candidate for `/refactor` or `/cleanup`). Not fixed in this session by
+explicit user decision, to keep the lint-tooling fix (KI-001) isolated
+from a much larger codebase cleanup.
 
 ---
 
@@ -362,6 +363,29 @@ For each resolved issue record:
 - Related feature or release
 
 Do not delete resolved issues.
+
+## KI-001 — `next lint` broken on Next.js 16 / ESLint 9 (RESOLVED)
+
+**Resolution date**: 2026-07-26
+**Original description**: `npm run lint` (→ `next lint`) failed with
+`Invalid project directory provided`; calling `eslint .` directly also
+crashed with `TypeError: Converting circular structure to JSON`.
+**Root causes** (two distinct bugs):
+1. `eslint.config.mjs` used `FlatCompat.extends("next/core-web-vitals",
+   "next/typescript")` — the legacy eslintrc-compatibility shim. The
+   installed `eslint-config-next@16.2.10` already ships native flat-config
+   arrays (`eslint-config-next/core-web-vitals`, `/typescript`); feeding
+   an already-flat array through the legacy-config translator crashed
+   during validation-error formatting.
+2. Next.js 16 removed the `next lint` CLI command entirely (confirmed via
+   `next --help` — not present in the command list), so the `lint` script
+   invoking it could never have worked on this Next version.
+**Solution implemented**: Rewrote `frontend/eslint.config.mjs` to import
+`eslint-config-next/core-web-vitals` and `/typescript` directly instead
+of via `FlatCompat`. Changed the `lint` script in `package.json` from
+`next lint` to `eslint .`.
+**Related**: Exposed 95 real pre-existing lint findings, tracked as
+KI-002.
 
 ---
 

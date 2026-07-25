@@ -250,3 +250,96 @@ dependencies.
 ## Session Outcome
 
 Completed.
+
+---
+
+## Session Information
+
+**Session ID:** 2026-07-26-002
+
+**Date:** 2026-07-26
+
+**Duration:** ~20 minutes
+
+**Contributors:** Abhishek Shakya (with Claude Code)
+
+**Branch:** main
+
+**Version:** frontend 0.1.0
+
+---
+
+## Objectives
+
+- Fix KI-001 (`next lint` broken on Next.js 16 / ESLint 9).
+
+---
+
+## Work Completed
+
+- Root-caused KI-001 to two distinct bugs: `eslint.config.mjs` was
+  feeding `eslint-config-next@16.2.10`'s already-flat config through the
+  legacy `FlatCompat.extends()` shim (crash), and Next.js 16 has removed
+  the `next lint` CLI command entirely (confirmed via `next --help`).
+- Fixed `eslint.config.mjs` to import `eslint-config-next/core-web-vitals`
+  and `/typescript` directly; changed `package.json`'s `lint` script from
+  `next lint` to `eslint .`.
+- Running lint for the first time exposed 95 real pre-existing findings
+  (60 errors, 35 warnings) — logged as KI-002, deliberately not fixed in
+  this session per user decision (DEC-2026-003).
+- Marked KI-001 resolved; updated PROJECT_PROGRESS.md blockers (B-001
+  resolved, new B-002 for the exposed findings) and root `CLAUDE.md`.
+
+---
+
+## Files Modified
+
+- `frontend/eslint.config.mjs`
+- `frontend/package.json` (`lint` script)
+- `.claude/docs/KNOWN_ISSUES.md`, `PROJECT_PROGRESS.md`
+- `CLAUDE.md`
+- `.claude/logs/decisions.md`
+
+---
+
+## Decisions Made
+
+DEC-2026-003 — fix the tooling only, track the exposed findings
+separately as KI-002 rather than fixing them in the same change.
+
+---
+
+## Testing Performed
+
+- `npx eslint .` — runs cleanly (no crash), reports real findings as
+  expected.
+- `npm run lint` — exits 1 on the real findings (correct behavior).
+- `npx vitest run` — 23/23 passing (unaffected).
+- `npx tsc --noEmit` — clean.
+
+---
+
+## Issues Encountered
+
+None beyond the two bugs being fixed.
+
+---
+
+## Technical Debt
+
+KI-002 (95 lint findings, see KNOWN_ISSUES.md) — new tracked debt
+surfaced by this fix, not created by it.
+
+---
+
+## Remaining Work
+
+Dedicated cleanup pass for KI-002, prioritizing the `react-hooks/
+set-state-in-effect` and `react-hooks/refs` findings (likely real bugs)
+over the `no-explicit-any`/unused-var findings (style/type-safety debt).
+
+---
+
+## Session Outcome
+
+Completed.

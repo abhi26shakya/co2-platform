@@ -282,32 +282,36 @@ Remaining:
 
 # Current Blockers
 
-### B-001
+### B-001 (RESOLVED 2026-07-26)
+
+`next lint` no longer works as a tool — fixed by rewriting
+`eslint.config.mjs` to import `eslint-config-next`'s native flat config
+directly (instead of via the legacy `FlatCompat` shim) and pointing the
+`lint` script at `eslint .` instead of the now-removed `next lint`
+command. See KNOWN_ISSUES.md KI-001 (resolved).
+
+### B-002
 
 ### Description
 
-`next lint` fails outright (`Invalid project directory provided`) on
-Next.js 16 with ESLint 9 + `eslint-config-next`'s flat-config compat
-layer (circular structure error when calling `eslint .` directly too).
-Confirmed pre-existing on `main` before this session's changes.
+Now that lint actually runs, it correctly fails: 60 errors / 35 warnings
+across the codebase (mostly `@typescript-eslint/no-explicit-any` and
+unused vars, plus some real-looking `react-hooks/set-state-in-effect`
+and `react-hooks/refs` bugs). See KNOWN_ISSUES.md KI-002.
 
 ### Impact
 
-The `frontend` CI job's lint step has likely been failing on every push;
-because GitHub Actions steps run sequentially and stop the job on
-failure, `typecheck`, the new `test` step, and `build` may never actually
-execute in CI until this is fixed.
+`frontend` CI's `lint` step will fail on every push until these are
+addressed.
 
 ### Owner
 
-Unassigned — flagged for `frontend-engineer` / `devops-engineer`.
+Unassigned — flagged for `frontend-engineer`.
 
 ### Resolution Plan
 
-Not fixed in this session (out of scope for test-infra work). Needs
-either an ESLint config downgrade/fix or migrating off `next lint` to a
-direct `eslint.config.mjs` invocation compatible with ESLint 9's flat
-config. See KNOWN_ISSUES.md.
+Unscheduled — dedicated cleanup pass, candidate for `/refactor` or
+`/cleanup`. Deliberately not bundled into the KI-001 tooling fix.
 
 ---
 
@@ -406,8 +410,9 @@ Monitoring status:
 
 # Next Recommended Actions
 
-1. Fix the frontend lint pipeline (B-001) — it's currently masking whether
-   CI even reaches the new test/build steps.
+1. Clean up the 95 lint findings now surfaced by the fixed pipeline
+   (B-002) — prioritize the `react-hooks/set-state-in-effect` and
+   `react-hooks/refs` findings, which look like real bugs.
 2. Extend frontend test coverage to Compare Predictions / Real-time
    Alerts logic (newest, least-tested code in `emission-map.tsx`).
 3. Set up Redis-backed rate limiting in docker-compose for prod parity.

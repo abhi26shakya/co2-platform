@@ -293,3 +293,45 @@ config) and shouldn't be bundled into an unrelated change.
 CI's `frontend` job may not currently reach `typecheck`/`test`/`build`
 in practice, since Actions steps stop the job on first failure. Flagged
 as `Next Recommended Actions` #1 in PROJECT_PROGRESS.md.
+
+---
+
+## Decision Information
+
+**Decision ID:** DEC-2026-003
+
+**Date:** 2026-07-26
+
+**Category:** Frontend, DevOps
+
+**Status:** Implemented
+
+### Decision
+
+Fix the `next lint` tooling bug (KI-001) as a standalone change — do not
+also fix the 95 real lint findings (KI-002) it exposed in the same
+session.
+
+### Context
+
+User asked to fix KI-001. Root-caused to two distinct bugs: (1)
+`eslint.config.mjs` fed `eslint-config-next@16.2.10`'s already-flat
+config through the legacy `FlatCompat.extends()` shim, and (2) Next.js
+16 removed the `next lint` CLI command outright. Fixed both — `eslint
+.` now runs cleanly as a tool — but doing so, for the first time, let
+lint actually analyze the codebase, surfacing 60 errors / 35 warnings
+that were previously invisible.
+
+### Rationale
+
+Presented the user with the finding and three options (tooling-fix only,
+tooling-fix + the ~15 likely-real react-hooks bugs, or fix everything).
+User chose tooling-fix only, keeping this change isolated and reviewable
+rather than bundling in a much larger, higher-risk codebase cleanup.
+
+### Impact
+
+`frontend` CI's `lint` step will now correctly fail (screen shows real
+violations) until KI-002 is addressed in a dedicated follow-up. This is
+expected: a working lint pipeline surfacing real problems, not a
+regression introduced by this change.

@@ -52,7 +52,7 @@ cd backend && mypy app               # optional typecheck (strict=false)
 cd ml-service && pytest              # contract tests for /predict
 cd ml-service && ruff check .
 
-cd frontend && npm run lint          # currently broken on main, see .claude/docs/KNOWN_ISSUES.md KI-001
+cd frontend && npm run lint          # eslint . — currently reports pre-existing findings, see .claude/docs/KNOWN_ISSUES.md KI-002
 cd frontend && npm run typecheck     # tsc --noEmit
 cd frontend && npm run test          # vitest run
 cd frontend && npm run build
