@@ -38,8 +38,14 @@ Hotspots stored as JSONB — the structure will evolve with the model.
 ## Frontend
 
 - App Router route groups: `(marketing)` `(auth)` `(dashboard)`
-- React Query owns all server state; no global store.
-- Leaflet + leaflet.heat for maps/heatmaps (no API key).
+- React Query owns all server state; zustand covers local/UI state that
+  needs to persist across components (e.g. the map camera/layer store).
+- CesiumJS (3D globe) for maps/heatmaps, loaded globally via `<script>`/
+  `<link>` tags in the root `app/layout.tsx` with the `beforeInteractive`
+  strategy — not the `react-leaflet` npm package. Basemap imagery comes from
+  CARTO/ArcGIS/OSM tile providers (no API key). Facility plumes render as
+  Cesium entities colored by the plume gradient; camera state syncs with the
+  zustand map store.
 - Design tokens in `globals.css`: dark-first "orbital observation" palette.
   The amber→magenta plume gradient is reserved exclusively for
   emission-intensity data — UI chrome never uses it.
@@ -109,10 +115,11 @@ Hotspots stored as JSONB — the structure will evolve with the model.
 
 - `GET /map/plants` (registry) and `GET /map/hotspots` (user's prediction
   hotspots flattened from JSONB, capped at the 500 most recent predictions).
-- Map: Leaflet on the CARTO dark basemap, client-only via next/dynamic
-  (Leaflet needs `window`). Plants render in sensor green; hotspots as circles
-  colored by interpolating the plume gradient with intensity - color IS the
-  data. Layer toggles + legend.
+- Map: CesiumJS 3D globe on the CARTO dark basemap, client-only (Cesium needs
+  `window`; the library is loaded globally rather than as an npm import - see
+  the Frontend section above). Plants render as point entities in sensor
+  green; hotspots/plumes as Cesium entities colored by interpolating the
+  plume gradient with intensity - color IS the data. Layer toggles + legend.
 - `GET /analytics`: monthly timeseries (date_trunc), 8-bucket histogram
   (width_bucket, max folded into last bucket), source counts, summary stats -
   all aggregation in SQL.
