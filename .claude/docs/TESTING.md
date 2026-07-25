@@ -202,6 +202,26 @@ Test:
 
 # Frontend Testing
 
+Tooling: Vitest + React Testing Library + jsdom, configured in
+`frontend/vitest.config.ts` (path alias `@/*` mirrors `tsconfig.json`,
+setup file at `frontend/src/test/setup.ts` loads jest-dom matchers).
+Run via `npm run test` (`vitest run`), wired into the `frontend` CI job.
+
+Current coverage (added 2026-07-26, `features/maps`):
+
+- `store/map-store.test.ts` — zustand store defaults, camera/basemap/gas
+  mutations, and localStorage persistence/hydration.
+- `hooks/use-geo.test.tsx`, `use-predict.test.tsx`,
+  `use-run-prediction.test.tsx` — React Query hooks, with `@/services/
+  api-client` mocked via `vi.mock` so no real network calls happen.
+
+Not yet covered: the map's UI component tree (`emission-map.tsx`, 1045
+lines) — GIS export, timeline, compare-predictions, and alerts logic all
+live inline in that component rather than as extractable pure functions.
+Testing it directly would need either component-level tests (mocking the
+global `window.Cesium` script) or extracting the export/GeoJSON logic
+into testable pure functions first. See TECH_DEBT.md.
+
 Test:
 
 - Components

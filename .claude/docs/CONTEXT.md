@@ -14,30 +14,29 @@ This document should be read before reviewing architecture, implementation detai
 
 ## Project Name
 
-<!-- Project name -->
+Emissia (co2-platform)
 
 ## Summary
 
-Provide a concise overview of the project.
-
-Include:
-
-- What the project does
-- Who it is for
-- The primary problem it solves
-- Why it exists
+Emissia predicts industrial CO2 emissions from satellite imagery. It is a
+three-service monorepo: a Next.js frontend, a FastAPI backend, and an
+isolated ML inference service, backed by PostgreSQL, Redis, and local/S3
+storage. It exists to make facility-level emissions estimation accessible
+from Earth-observation data (Sentinel-5P today) without requiring the user
+to run their own model pipeline.
 
 ---
 
 # Vision
 
-Describe the long-term vision.
-
-Questions to answer:
-
-- What does success look like?
-- What impact should the project have?
-- How should it evolve over time?
+A production deployment where a real trained model (CNN/U-Net, per
+`docs/ml-integration.md`) sits behind the existing `Predictor` protocol,
+serving facility-level CO2 estimates with quantified confidence, while the
+frontend's map/GIS/reporting experience (already built) becomes the
+primary way researchers and operators explore that data. Success is a
+system where swapping in a new model version never requires touching the
+backend or frontend — the versioned `PredictionResultV1` contract is the
+seam that makes that possible.
 
 ---
 
@@ -45,14 +44,17 @@ Questions to answer:
 
 Primary objectives:
 
-- Objective 1
-- Objective 2
-- Objective 3
+- Estimate CO2 emissions per facility from satellite imagery via a stable,
+  versioned inference contract.
+- Provide an interactive 3D (CesiumJS) map experience for exploring
+  emissions, hotspots, and time-series trends.
+- Keep the ML integration boundary swappable — the mock predictor today,
+  a real model later, with zero backend/frontend changes required.
 
 Secondary objectives:
 
-- Objective 1
-- Objective 2
+- Export/reporting workflows (PNG, GeoJSON, CSV, PDF).
+- Multi-gas visualization (CO2, CH4, NO2, SO2, CO) and real-time alerts.
 
 ---
 
@@ -92,22 +94,21 @@ Include:
 
 ## In Scope
 
-List functionality included in the project.
-
-Examples:
-
-- Authentication
-- Dashboard
-- API
-- Reporting
-- Machine learning
-- Monitoring
+- JWT auth (access + rotating refresh tokens), dashboard, image upload,
+  predictions, reports, analytics — all implemented in `backend/`.
+- CesiumJS-based interactive maps: multi-gas layers, GIS drawing/export
+  tools, timeline playback, compare-predictions modes, real-time alerts —
+  all implemented in `frontend/src/features/maps`.
+- A mock ML predictor behind a versioned `/predict` contract.
 
 ---
 
-## Out of Scope
+## Out of Scope (for now)
 
-List functionality intentionally excluded.
+- A real trained model (currently mocked, see `docs/ml-integration.md`).
+- Celery for heavy reports/preprocessing, S3 storage backend, Google
+  OAuth, plant auto-matching on upload (documented post-v1 backlog in
+  root `CLAUDE.md`).
 
 ---
 
@@ -125,20 +126,16 @@ Examples:
 
 # Project Status
 
-Current stage:
-
-- Planning
-- Design
-- Development
-- Testing
-- Production
-- Maintenance
+Current stage: Development (backend/ML have real test coverage; frontend
+feature work has outpaced its test coverage until this session).
 
 Current priorities:
 
-- Priority 1
-- Priority 2
-- Priority 3
+1. Frontend test coverage for the map/prediction critical path (in
+   progress — see PROJECT_PROGRESS.md).
+2. Fix the frontend lint pipeline (`next lint` / ESLint 9 flat-config
+   incompatibility — currently broken on `main`, see KNOWN_ISSUES.md).
+3. Real ML model integration (longer-term, needs a chosen model/dataset).
 
 ---
 

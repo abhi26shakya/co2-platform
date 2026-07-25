@@ -14,75 +14,66 @@ This document should always represent the current state of development.
 
 ## Current Phase
 
-Choose one:
-
-- Planning
-- Architecture
-- Development
-- Testing
-- Deployment
-- Production
-- Maintenance
+Development (backend/ML services are test-covered and CI-gated; frontend
+just gained its first test suite this session).
 
 ---
 
 ## Current Version
 
-Version:
+Version: 0.1.0 (frontend), unversioned backend/ml-service (pre-1.0)
 
 ---
 
 ## Overall Progress
 
-Estimated completion:
-
-Example:
+MVP feature surface (auth, upload, mock predictions, reports, analytics,
+interactive maps) is functionally complete. Real ML model integration and
+production-hardening (S3, Celery, prod rate-limit backend) remain.
 
 ```
-████████░░ 80%
+███████░░░ ~70%
 ```
 
 ---
 
 ## Last Updated
 
-Date:
+Date: 2026-07-26
 
 ---
 
 # Current Focus
 
-Describe the main activities currently being worked on.
-
-Examples:
-
-- Backend development
-- ML pipeline implementation
-- UI improvements
-- Infrastructure setup
-- Testing
+- Closing the frontend test-coverage gap identified by `/next`: the map
+  feature (zustand store + prediction/geo hooks) had zero tests despite
+  being the most actively-changed, most complex part of the codebase.
+- Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
 
 # Completed Work
 
-List completed milestones.
+### M-001 — Core platform (backend/ML)
 
----
+Auth (Argon2id + JWT + rotating refresh tokens), image upload, mock
+inference contract, predictions, reports, analytics, dashboard — all
+implemented, tested (pytest), and CI-gated in `backend/` and `ml-service/`.
 
-## Milestone Template
+### M-002 — CesiumJS map experience (frontend)
 
-### Milestone ID
+3D globe migration off leaflet, multi-gas visualization, GIS drawing/
+measurement tools, timeline playback, compare-predictions modes,
+real-time alerts, export/sharing system. Implemented but untested until
+M-003.
 
-M-001
+### M-003 — Frontend test infrastructure (this session)
 
-### Title
-
-### Completion Date
-
-### Summary
-
-### Related Features
+Vitest + React Testing Library added. Initial coverage: `map-store`
+(camera/basemap/gas-layer state + localStorage persistence), `use-geo`
+(`usePlants`/`useHotspots`/`useAnalytics`), `usePredict`,
+`useRunPrediction` (incl. query-invalidation behavior). 23 tests, all
+passing. CI's `frontend` job now runs `npm run test`.
 
 Reference:
 
@@ -291,19 +282,32 @@ Remaining:
 
 # Current Blockers
 
-Document anything preventing progress.
-
-For each blocker include:
-
-### Blocker ID
+### B-001
 
 ### Description
 
+`next lint` fails outright (`Invalid project directory provided`) on
+Next.js 16 with ESLint 9 + `eslint-config-next`'s flat-config compat
+layer (circular structure error when calling `eslint .` directly too).
+Confirmed pre-existing on `main` before this session's changes.
+
 ### Impact
+
+The `frontend` CI job's lint step has likely been failing on every push;
+because GitHub Actions steps run sequentially and stop the job on
+failure, `typecheck`, the new `test` step, and `build` may never actually
+execute in CI until this is fixed.
 
 ### Owner
 
+Unassigned — flagged for `frontend-engineer` / `devops-engineer`.
+
 ### Resolution Plan
+
+Not fixed in this session (out of scope for test-infra work). Needs
+either an ESLint config downgrade/fix or migrating off `next lint` to a
+direct `eslint.config.mjs` invocation compatible with ESLint 9's flat
+config. See KNOWN_ISSUES.md.
 
 ---
 
@@ -343,29 +347,32 @@ CHANGELOG.md
 
 # Testing Status
 
-Current testing state:
-
 ## Unit Tests
 
-Status:
+Status: Backend (pytest, 9 files/704 lines) and ml-service (pytest)
+passing and CI-gated. Frontend now has Vitest coverage for
+`features/maps` store + hooks (23 tests passing) — first frontend tests
+in the repo.
 
-Coverage:
+Coverage: Backend/ML — core routes and the inference contract.
+Frontend — map state store and prediction/geo query hooks. Not yet
+covered: the 1045-line `emission-map.tsx` component itself (GIS export,
+timeline, compare-predictions, alerts logic all live inline there — hard
+to unit test without first extracting pure functions; flagged as
+follow-up in TECH_DEBT.md).
 
 ---
 
 ## Integration Tests
 
-Status:
-
-Coverage:
+Status: Backend has route-level integration tests via `TestClient` +
+real Postgres in CI. No frontend integration/E2E tests exist yet.
 
 ---
 
 ## End-to-End Tests
 
-Status:
-
-Coverage:
+Status: None. No Playwright/Cypress installed.
 
 ---
 
@@ -387,27 +394,25 @@ Monitoring status:
 
 # Documentation Status
 
-Track documentation completeness.
-
 | Document | Status |
 |---|---|
-| Architecture | Complete |
-| API Reference | Complete |
-| Database | In Progress |
+| Architecture | Complete (root `docs/architecture.md`) |
+| API Reference | Pending (`.claude/docs/API_REFERENCE.md` still a template) |
+| Database | Pending |
 | Deployment | Pending |
+| Testing | Updated this session (`.claude/docs/TESTING.md`) |
 
 ---
 
 # Next Recommended Actions
 
-List the highest priority next steps.
-
-Example:
-
-1. Complete authentication module.
-2. Finish database migration.
-3. Add integration tests.
-4. Deploy staging environment.
+1. Fix the frontend lint pipeline (B-001) — it's currently masking whether
+   CI even reaches the new test/build steps.
+2. Extend frontend test coverage to Compare Predictions / Real-time
+   Alerts logic (newest, least-tested code in `emission-map.tsx`).
+3. Set up Redis-backed rate limiting in docker-compose for prod parity.
+4. Choose a model/dataset to begin real ML integration (replacing the
+   mock predictor).
 
 ---
 

@@ -251,6 +251,29 @@ Issues requiring immediate attention.
 
 Issues affecting important functionality.
 
+## KI-001 — `next lint` broken on Next.js 16 / ESLint 9
+
+**Classification**: Bug
+**Discovered**: 2026-07-26, while wiring `npm run test` into frontend CI.
+**Description**: `npm run lint` (→ `next lint`) fails immediately with
+`Invalid project directory provided, no such directory: .../frontend/lint`.
+Calling `eslint .` directly (bypassing `next lint`) also fails, with
+`TypeError: Converting circular structure to JSON` inside
+`eslint-config-next`'s FlatCompat shim — an incompatibility between
+ESLint 9's flat config and the installed `eslint-config-next` version.
+**Confirmed pre-existing**: reproduced on a clean `git stash` of `main`
+before any changes in this session, so it is not a regression from the
+new test infrastructure.
+**Impact**: The `frontend` CI job's `lint` step runs before `typecheck`,
+`test`, and `build`; since GitHub Actions stops a job on the first
+failing step, those later steps — including the new Vitest step — may
+not actually be executing in CI on `main` today. Needs verification
+against actual Actions run history.
+**Resolution Plan**: Not fixed in this session (separate scope from
+frontend test infra). Needs either an `eslint-config-next` / ESLint
+version alignment, or migrating the lint step to invoke
+`eslint.config.mjs` directly with a config compatible with ESLint 9.
+
 ---
 
 # Medium Priority Issues
@@ -271,19 +294,47 @@ Track accumulated technical debt.
 
 For each item include:
 
-## Debt Item
+## Debt Item: `emission-map.tsx` is a 1045-line monolithic component
 
-Description:
+Description: All map rendering modes, GIS drawing/export tools, timeline
+playback, compare-predictions sub-modes, and real-time alerts logic live
+inline in one component (`frontend/src/features/maps/components/map/
+emission-map.tsx`) rather than as separable, independently testable units.
 
-Reason Introduced:
+Reason Introduced: Rapid feature iteration across several commits
+(multi-gas layers → GIS tools → export/sharing → timeline → compare
+predictions/alerts), each adding to the same file.
 
-Impact:
+Impact: Cannot unit-test GeoJSON export or compare-predictions logic
+without either mocking the whole CesiumJS global or extracting pure
+functions first. Increases regression risk for future changes.
 
-Estimated Effort:
+Estimated Effort: Medium (extract export/GeoJSON-generation and
+compare-mode logic into pure functions/hooks, then test those directly).
 
-Priority:
+Priority: Medium — not urgent, but compounds with every new map feature.
 
-Planned Resolution:
+Planned Resolution: Unscheduled. Candidate for a future `/refactor` pass
+once broader test coverage (this session's work) is in place to catch
+regressions during extraction.
+
+## Debt Item: Legacy `leaflet` / `react-leaflet` dependencies
+
+Description: Both packages remain in `frontend/package.json` but zero
+files under `src/` reference them (confirmed via grep) since the
+CesiumJS migration.
+
+Reason Introduced: CesiumJS migration (commit `5a69579`) replaced Leaflet
+without removing the now-unused dependencies.
+
+Impact: Unnecessary bundle/install size only; no functional risk.
+
+Estimated Effort: Trivial (`npm uninstall leaflet react-leaflet
+@types/leaflet` + confirm build).
+
+Priority: Low.
+
+Planned Resolution: Unscheduled cleanup task.
 
 ---
 
