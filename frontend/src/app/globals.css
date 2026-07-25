@@ -5,19 +5,30 @@
   Dark-first: deep pre-dawn navy ground, instrument-white text,
   and a plume gradient (amber -> magenta) reserved EXCLUSIVELY for
   emission-intensity data. UI chrome never uses plume colors, so
-  wherever the eye sees warmth, it is seeing data.
+  wherever the eye sees warmth, it is seeing data. Chrome accents
+  (glass, glows, buttons) instead draw from --color-sensor and
+  --color-halo, both theme-aware and free of plume hues.
 */
 @theme {
-  --color-ground-950: #070b12;   /* page background */
-  --color-ground-900: #0b1220;   /* raised surfaces */
-  --color-ground-800: #121b2e;   /* cards */
-  --color-ground-700: #1c2942;   /* borders, dividers */
-  --color-ground-400: #64748b;   /* muted text */
-  --color-instrument: #e6edf7;   /* primary text - slightly cool white */
+  --color-ground-950: #090d15;   /* page background */
+  --color-ground-900: #0e1420;   /* raised surfaces */
+  --color-ground-800: #131a29;   /* cards */
+  --color-ground-700: #212c42;   /* borders, dividers */
+  --color-ground-400: #8892a4;   /* muted text */
+  --color-instrument: #eef2f9;   /* primary text - slightly cool white */
   --color-plume-low: #f5a623;    /* low emission intensity */
   --color-plume-high: #e64980;   /* high emission intensity / hotspots */
-  --color-sensor: #34d399;       /* healthy / confidence / success */
+  --color-sensor: #34d399;       /* healthy / confidence / success / primary accent */
+  --color-halo: #60a5fa;         /* secondary accent - cool complement to sensor */
   --color-alert: #f87171;        /* errors */
+  --color-warn: #fbbf24;         /* warnings (chrome-safe, distinct from plume-low) */
+
+  /* Glass surface system - theme-aware via var() overrides below */
+  --glass-surface: rgba(19, 26, 41, 0.55);
+  --glass-surface-strong: rgba(14, 20, 32, 0.78);
+  --glass-border: rgba(238, 242, 249, 0.09);
+  --glass-highlight: rgba(238, 242, 249, 0.06);
+  --shadow-color: rgba(3, 6, 12, 0.55);
 
   --font-display: var(--font-space-grotesk), sans-serif;
   --font-sans: var(--font-inter), sans-serif;
@@ -29,13 +40,20 @@
 }
 
 html.light {
-  --color-ground-950: #f8fafc;
+  --color-ground-950: #f6f5f1;
   --color-ground-900: #ffffff;
-  --color-ground-800: #f1f5f9;
-  --color-ground-700: #cbd5e1;
-  --color-ground-400: #475569;
-  --color-instrument: #0f172a;
-  --color-alert: #ef4444;
+  --color-ground-800: #ffffff;
+  --color-ground-700: #e6e3da;
+  --color-ground-400: #6b7078;
+  --color-instrument: #191c22;
+  --color-alert: #dc2626;
+  --color-warn: #b45309;
+
+  --glass-surface: rgba(255, 255, 255, 0.55);
+  --glass-surface-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(25, 28, 34, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.8);
+  --shadow-color: rgba(30, 35, 45, 0.12);
   color-scheme: light;
 }
 
@@ -44,6 +62,108 @@ body {
   color: var(--color-instrument);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* ---------------------------------------------------------------- */
+/* Glassmorphism system                                              */
+/* ---------------------------------------------------------------- */
+
+/* Base frosted panel: use for floating nav, hero card, feature cards. */
+.glass {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    0 1px 0 0 var(--glass-highlight) inset,
+    0 20px 40px -20px var(--shadow-color);
+}
+
+/* Denser variant for surfaces that sit over busy backgrounds (nav, modals). */
+.glass-strong {
+  background: var(--glass-surface-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    0 1px 0 0 var(--glass-highlight) inset,
+    0 24px 48px -24px var(--shadow-color);
+}
+
+/* Interactive glass card: lift + brighten border on hover. */
+.glass-card {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: 0 1px 0 0 var(--glass-highlight) inset, 0 12px 28px -18px var(--shadow-color);
+  transition: transform 0.35s cubic-bezier(0.21, 0.6, 0.35, 1), border-color 0.35s ease, box-shadow 0.35s ease;
+}
+.glass-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow:
+    0 1px 0 0 var(--glass-highlight) inset,
+    0 24px 48px -24px var(--shadow-color),
+    0 0 32px -8px rgba(52, 211, 153, 0.18);
+}
+
+/* ---------------------------------------------------------------- */
+/* Buttons - filled / glass / outline, all sensor-toned (never plume) */
+/* ---------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: transform 0.2s cubic-bezier(0.21, 0.6, 0.35, 1), box-shadow 0.3s ease, border-color 0.3s ease, background-color 0.3s ease, opacity 0.3s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-sensor);
+  outline-offset: 2px;
+}
+
+.btn-filled {
+  background: linear-gradient(135deg, var(--color-sensor), var(--color-halo));
+  color: #06251c;
+  box-shadow: 0 8px 24px -8px rgba(52, 211, 153, 0.45);
+}
+.btn-filled:hover {
+  box-shadow: 0 12px 32px -6px rgba(52, 211, 153, 0.6);
+  transform: translateY(-1px);
+}
+
+.btn-glass {
+  background: var(--glass-surface);
+  border: 1px solid var(--glass-border);
+  color: var(--color-instrument);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+.btn-glass:hover {
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 24px -6px rgba(52, 211, 153, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--color-ground-700);
+  color: var(--color-ground-400);
+}
+.btn-outline:hover {
+  border-color: var(--color-instrument);
+  color: var(--color-instrument);
 }
 
 /* Data readouts (stats, coordinates, ppm values) always use the mono face. */
@@ -122,9 +242,60 @@ body {
 }
 
 .neon-btn-animate {
-  background: linear-gradient(-45deg, #34d399, #60a5fa, #f472b6, #fbbf24);
+  background: linear-gradient(-45deg, #34d399, #60a5fa, #2dd4bf, #34d399);
   background-size: 300% 300%;
   animation: neon-gradient-bg 6s ease infinite;
+}
+
+/* ---------------------------------------------------------------- */
+/* Aurora / mesh background - layered, GPU-cheap (transform + opacity) */
+/* ---------------------------------------------------------------- */
+
+@keyframes float-slow {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(2%, -4%, 0) scale(1.06); }
+}
+@keyframes float-slow-reverse {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-3%, 3%, 0) scale(1.08); }
+}
+@keyframes drift {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(0, -2.5%, 0); }
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  will-change: transform;
+}
+.aurora-blob-a {
+  animation: float-slow 22s ease-in-out infinite;
+}
+.aurora-blob-b {
+  animation: float-slow-reverse 26s ease-in-out infinite;
+}
+.aurora-blob-c {
+  animation: drift 34s ease-in-out infinite alternate;
+}
+
+/* Subtle grain to keep large blurred gradients from looking flat/banded. */
+.bg-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html.light .bg-noise {
+  opacity: 0.035;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob-a, .aurora-blob-b, .aurora-blob-c {
+    animation: none;
+  }
 }
 
 @keyframes bounce-subtle {

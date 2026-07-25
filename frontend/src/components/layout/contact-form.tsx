@@ -59,7 +59,7 @@ export function ContactForm() {
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-ground-700/60 bg-ground-800/40 p-8 text-center backdrop-blur-md shadow-2xl min-h-[400px]">
+      <div className="glass flex flex-col items-center justify-center rounded-2xl p-8 text-center min-h-[400px]">
         <div className="rounded-full bg-sensor/10 p-4 border border-sensor/20 animate-pulse">
           <CheckCircle2 className="h-10 w-10 text-sensor" />
         </div>
@@ -67,10 +67,7 @@ export function ContactForm() {
         <p className="mt-3 text-sm text-ground-400 max-w-sm leading-relaxed">
           Thank you for reaching out. A member of the Emissia team will review your inquiry and respond shortly.
         </p>
-        <button
-          onClick={() => setSubmitted(false)}
-          className="mt-8 rounded-lg border border-ground-700 bg-ground-900/60 px-5 py-2.5 text-xs font-medium text-instrument hover:border-ground-400 transition-colors"
-        >
+        <button onClick={() => setSubmitted(false)} className="btn btn-outline mt-8 text-xs py-2.5">
           Send another message
         </button>
       </div>
@@ -78,7 +75,7 @@ export function ContactForm() {
   }
 
   return (
-    <div className="flex flex-col gap-6 rounded-2xl border border-ground-700/60 bg-ground-800/40 p-6 sm:p-8 backdrop-blur-md shadow-2xl">
+    <div className="glass flex flex-col gap-6 rounded-2xl p-6 sm:p-8">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4.5">
         {/* Name */}
         <div className="flex flex-col gap-1.5">
@@ -93,7 +90,7 @@ export function ContactForm() {
             onChange={handleInputChange}
             required
             placeholder="John Doe"
-            className="w-full rounded-lg border border-ground-700 bg-ground-950/60 px-4 py-2.5 text-sm text-instrument placeholder-ground-600 outline-none transition-all focus:border-ground-400 focus:bg-ground-950 focus:ring-1 focus:ring-ground-400"
+            className="w-full rounded-lg border border-ground-700 bg-ground-950/40 px-4 py-2.5 text-sm text-instrument placeholder-ground-500 outline-none backdrop-blur-sm transition-all focus:border-sensor/50 focus:bg-ground-950/70 focus:ring-1 focus:ring-sensor/30"
           />
         </div>
 
@@ -109,7 +106,7 @@ export function ContactForm() {
             value={formData.organization}
             onChange={handleInputChange}
             placeholder="NASA, Stanford, etc."
-            className="w-full rounded-lg border border-ground-700 bg-ground-950/60 px-4 py-2.5 text-sm text-instrument placeholder-ground-600 outline-none transition-all focus:border-ground-400 focus:bg-ground-950 focus:ring-1 focus:ring-ground-400"
+            className="w-full rounded-lg border border-ground-700 bg-ground-950/40 px-4 py-2.5 text-sm text-instrument placeholder-ground-500 outline-none backdrop-blur-sm transition-all focus:border-sensor/50 focus:bg-ground-950/70 focus:ring-1 focus:ring-sensor/30"
           />
         </div>
 
@@ -126,7 +123,7 @@ export function ContactForm() {
             onChange={handleInputChange}
             required
             placeholder="johndoe@institution.org"
-            className="w-full rounded-lg border border-ground-700 bg-ground-950/60 px-4 py-2.5 text-sm text-instrument placeholder-ground-600 outline-none transition-all focus:border-ground-400 focus:bg-ground-950 focus:ring-1 focus:ring-ground-400"
+            className="w-full rounded-lg border border-ground-700 bg-ground-950/40 px-4 py-2.5 text-sm text-instrument placeholder-ground-500 outline-none backdrop-blur-sm transition-all focus:border-sensor/50 focus:bg-ground-950/70 focus:ring-1 focus:ring-sensor/30"
           />
         </div>
 
@@ -143,7 +140,7 @@ export function ContactForm() {
             onChange={handleInputChange}
             required
             placeholder="Select a quick inquiry type below or type a custom subject"
-            className="w-full rounded-lg border border-ground-700 bg-ground-950/60 px-4 py-2.5 text-sm text-instrument placeholder-ground-600 outline-none transition-all focus:border-ground-400 focus:bg-ground-950 focus:ring-1 focus:ring-ground-400"
+            className="w-full rounded-lg border border-ground-700 bg-ground-950/40 px-4 py-2.5 text-sm text-instrument placeholder-ground-500 outline-none backdrop-blur-sm transition-all focus:border-sensor/50 focus:bg-ground-950/70 focus:ring-1 focus:ring-sensor/30"
           />
         </div>
 
@@ -160,7 +157,7 @@ export function ContactForm() {
             required
             rows={4}
             placeholder="Describe your inquiry..."
-            className="w-full resize-none rounded-lg border border-ground-700 bg-ground-950/60 px-4 py-2.5 text-sm text-instrument placeholder-ground-600 outline-none transition-all focus:border-ground-400 focus:bg-ground-950 focus:ring-1 focus:ring-ground-400"
+            className="w-full resize-none rounded-lg border border-ground-700 bg-ground-950/40 px-4 py-2.5 text-sm text-instrument placeholder-ground-500 outline-none backdrop-blur-sm transition-all focus:border-sensor/50 focus:bg-ground-950/70 focus:ring-1 focus:ring-sensor/30"
           />
         </div>
 
@@ -168,7 +165,7 @@ export function ContactForm() {
         <button
           type="submit"
           disabled={loading || !formData.name || !formData.email || !formData.message}
-          className="group mt-2 flex items-center justify-center gap-2 rounded-lg px-5 py-3 text-sm font-medium text-ground-950 transition-all duration-300 hover:shadow-[0_0_20px_rgba(52,211,153,0.25)] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none neon-btn-animate cursor-pointer"
+          className="btn btn-filled group mt-2 w-full disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none cursor-pointer"
         >
           {loading ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-ground-950 border-t-transparent" />
@@ -196,8 +193,8 @@ export function ContactForm() {
                 onClick={() => selectInquiryType(tag.type)}
                 className={`text-xs px-3.5 py-1.5 rounded-full border transition-all duration-200 select-none cursor-pointer ${
                   isActive
-                    ? "border-instrument bg-ground-700 text-instrument font-medium shadow-[0_0_10px_rgba(230,237,247,0.1)]"
-                    : "border-ground-700 bg-ground-900/60 text-ground-400 hover:border-ground-500 hover:text-instrument hover:bg-ground-800"
+                    ? "border-sensor/50 bg-sensor/10 text-instrument font-medium shadow-[0_0_10px_rgba(52,211,153,0.15)]"
+                    : "border-ground-700 bg-ground-900/40 text-ground-400 backdrop-blur-sm hover:border-sensor/30 hover:text-instrument hover:bg-ground-800/60"
                 }`}
               >
                 {tag.label}

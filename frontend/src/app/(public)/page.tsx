@@ -2,6 +2,7 @@ import { Navbar } from "@/components/layout/navbar";
 import { ContactForm } from "@/components/layout/contact-form";
 import { OrbitField } from "@/components/marketing/orbit-field";
 import { Reveal } from "@/components/marketing/reveal";
+import { Spotlight } from "@/components/marketing/spotlight";
 import {
   BarChart3,
   Cpu,
@@ -99,9 +100,16 @@ export default function Home() {
     <main>
       <Navbar />
       {/* ---- Hero ---- */}
-      <section className="relative flex min-h-screen flex-col items-center justify-center px-6">
+      <section className="relative flex min-h-screen flex-col items-center justify-center px-6 overflow-hidden">
         <OrbitField />
+        <Spotlight />
         <div className="relative z-10 flex flex-col items-center text-center -translate-y-8 sm:-translate-y-12">
+          <Reveal>
+            <span className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-ground-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-sensor shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              Now estimating emissions from live satellite scenes
+            </span>
+          </Reveal>
           <h1
             className="mt-8 max-w-3xl text-5xl font-medium leading-[1.05] tracking-tight sm:text-7xl"
             style={display}
@@ -114,16 +122,10 @@ export default function Home() {
             Transform satellite imagery into industrial carbon intelligence with AI-powered emission estimation, hotspot detection, and research-ready analytics.
           </p>
           <div className="mt-10 flex items-center gap-3">
-            <Link
-              href="/signup"
-              className="rounded-lg bg-instrument px-6 py-3 text-sm font-medium text-ground-950 transition-opacity hover:opacity-90"
-            >
+            <Link href="/signup" className="btn btn-filled">
               Start Free
             </Link>
-            <Link
-              href="/login"
-              className="rounded-lg border border-ground-700 bg-ground-900/60 px-6 py-3 text-sm backdrop-blur transition-colors hover:border-ground-400"
-            >
+            <Link href="/login" className="btn btn-glass">
               Watch Demo
             </Link>
           </div>
@@ -152,8 +154,8 @@ export default function Home() {
         {/* 2x2 Grid of cards */}
         <div className="mt-16 grid gap-6 sm:grid-cols-2">
           <Reveal delay={0.1}>
-            <div className="group h-full rounded-xl border border-ground-700 bg-ground-800/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-sensor/50 hover:shadow-[0_0_20px_rgba(52,211,153,0.12)]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-ground-700 bg-ground-900/60 text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/30">
+            <div className="group h-full rounded-2xl glass-card p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl glass text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/40">
                 <Microscope className="h-6 w-6 transition-transform duration-300 group-hover:rotate-6" />
               </div>
               <h3 className="mt-5 text-lg font-medium text-instrument">Researchers</h3>
@@ -164,8 +166,8 @@ export default function Home() {
           </Reveal>
 
           <Reveal delay={0.2}>
-            <div className="group h-full rounded-xl border border-ground-700 bg-ground-800/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-sensor/50 hover:shadow-[0_0_20px_rgba(52,211,153,0.12)]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-ground-700 bg-ground-900/60 text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/30">
+            <div className="group h-full rounded-2xl glass-card p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl glass text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/40">
                 <Landmark className="h-6 w-6 transition-transform duration-300 group-hover:rotate-6" />
               </div>
               <h3 className="mt-5 text-lg font-medium text-instrument">Government & Regulators</h3>
@@ -176,8 +178,8 @@ export default function Home() {
           </Reveal>
 
           <Reveal delay={0.3}>
-            <div className="group h-full rounded-xl border border-ground-700 bg-ground-800/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-sensor/50 hover:shadow-[0_0_20px_rgba(52,211,153,0.12)]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-ground-700 bg-ground-900/60 text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/30">
+            <div className="group h-full rounded-2xl glass-card p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl glass text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/40">
                 <Factory className="h-6 w-6 transition-transform duration-300 group-hover:rotate-6" />
               </div>
               <h3 className="mt-5 text-lg font-medium text-instrument">Industrial Enterprises</h3>
@@ -188,8 +190,8 @@ export default function Home() {
           </Reveal>
 
           <Reveal delay={0.4}>
-            <div className="group h-full rounded-xl border border-ground-700 bg-ground-800/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-sensor/50 hover:shadow-[0_0_20px_rgba(52,211,153,0.12)]">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-ground-700 bg-ground-900/60 text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/30">
+            <div className="group h-full rounded-2xl glass-card p-6">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl glass text-sensor transition-all duration-300 group-hover:scale-110 group-hover:border-sensor/40">
                 <Leaf className="h-6 w-6 transition-transform duration-300 group-hover:rotate-6" />
               </div>
               <h3 className="mt-5 text-lg font-medium text-instrument">Climate & Environmental Organizations</h3>
@@ -202,24 +204,18 @@ export default function Home() {
 
         {/* Center Callout Box */}
         <Reveal delay={0.5}>
-          <div className="mt-16 rounded-2xl border border-ground-700 bg-ground-900/40 p-8 md:p-10 text-center relative overflow-hidden">
+          <div className="mt-16 rounded-3xl glass p-8 md:p-10 text-center relative overflow-hidden">
             {/* Subtle glow effect behind */}
-            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-sensor/5 blur-[120px] pointer-events-none" />
+            <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-sensor/10 blur-[120px] pointer-events-none" />
             <h3 className="text-xl font-medium text-instrument" style={display}>One Platform. Multiple Applications.</h3>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-ground-400">
               Whether you&apos;re conducting research, monitoring industrial facilities, or supporting climate policy, Emissia provides AI-powered insights from satellite imagery to help understand and reduce industrial carbon emissions.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                href="/signup"
-                className="group flex items-center gap-1.5 rounded-full px-6 py-3 text-sm font-medium text-ground-950 transition-all duration-300 hover:shadow-[0_0_25px_rgba(52,211,153,0.35)] active:scale-[0.98] neon-btn-animate"
-              >
+              <Link href="/signup" className="btn btn-filled">
                 Start Analyzing
               </Link>
-              <Link
-                href="http://localhost:8000/docs"
-                className="rounded-full border border-ground-700 bg-ground-900/60 px-6 py-3 text-sm font-medium text-ground-400 backdrop-blur transition-all duration-300 hover:border-ground-400 hover:text-instrument active:scale-[0.98]"
-              >
+              <Link href="http://localhost:8000/docs" className="btn btn-outline">
                 View Documentation
               </Link>
             </div>
@@ -230,26 +226,30 @@ export default function Home() {
       {/* ---- How it works ---- */}
       <section id="platform" className="mx-auto max-w-5xl px-6 py-24">
         <Reveal>
-          <h2 className="text-3xl font-medium tracking-tight" style={display}>
+          <p className="readout text-xs uppercase tracking-[0.3em] text-sensor">Workflow</p>
+          <h2 className="mt-3 text-3xl font-medium tracking-tight sm:text-4xl" style={display}>
             From pixels to policy-grade numbers
           </h2>
         </Reveal>
-        <div className="mt-12 grid gap-10 sm:grid-cols-3">
+        <div className="mt-14 grid gap-6 sm:grid-cols-3">
           {STEPS.map((s, i) => (
             <Reveal key={s.n} delay={i * 0.12}>
-              <p className="readout plume-text text-sm">{s.n}</p>
-              <h3 className="mt-3 text-lg font-medium">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ground-400">{s.body}</p>
+              <div className="h-full rounded-2xl glass-card p-6">
+                <p className="readout plume-text text-sm">{s.n}</p>
+                <h3 className="mt-3 text-lg font-medium text-instrument">{s.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ground-400">{s.body}</p>
+              </div>
             </Reveal>
           ))}
         </div>
       </section>
 
       {/* ---- Features ---- */}
-      <section className="border-y border-ground-700 bg-ground-900/40">
+      <section className="border-y border-ground-700/60 bg-ground-900/40">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <Reveal>
-            <h2 className="text-3xl font-medium tracking-tight" style={display}>
+            <p className="readout text-xs uppercase tracking-[0.3em] text-sensor">Capabilities</p>
+            <h2 className="mt-3 text-3xl font-medium tracking-tight" style={display}>
               Built like a research instrument
             </h2>
             <p className="mt-3 max-w-xl text-sm text-ground-400">
@@ -260,9 +260,11 @@ export default function Home() {
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
               <Reveal key={f.title} delay={(i % 3) * 0.1}>
-                <div className="h-full rounded-xl border border-ground-700 bg-ground-800/60 p-5">
-                  <f.icon className="h-5 w-5 text-ground-400" aria-hidden />
-                  <h3 className="mt-4 text-sm font-medium">{f.title}</h3>
+                <div className="group h-full rounded-2xl glass-card p-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg glass text-ground-400 transition-colors duration-300 group-hover:text-sensor">
+                    <f.icon className="h-5 w-5" aria-hidden />
+                  </div>
+                  <h3 className="mt-4 text-sm font-medium text-instrument">{f.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-ground-400">{f.body}</p>
                 </div>
               </Reveal>
@@ -274,7 +276,8 @@ export default function Home() {
       {/* ---- Research motivation ---- */}
       <section id="research" className="mx-auto max-w-3xl px-6 py-24">
         <Reveal>
-          <h2 className="text-3xl font-medium tracking-tight" style={display}>
+          <p className="readout text-xs uppercase tracking-[0.3em] text-sensor">Research</p>
+          <h2 className="mt-3 text-3xl font-medium tracking-tight sm:text-4xl" style={display}>
             Why measure from space?
           </h2>
           <div className="mt-6 space-y-4 text-sm leading-relaxed text-ground-400">
@@ -297,28 +300,28 @@ export default function Home() {
       </section>
 
       {/* ---- CTA ---- */}
-      <section className="border-t border-ground-700">
-        <div className="mx-auto flex max-w-5xl flex-col items-center px-6 py-24 text-center">
+      <section className="border-t border-ground-700/60 px-6">
+        <div className="mx-auto max-w-5xl py-24">
           <Reveal>
-            <h2 className="text-3xl font-medium tracking-tight" style={display}>
-              Put your scenes to work
-            </h2>
-            <p className="mt-3 text-sm text-ground-400">
-              Create an account, upload a GeoTIFF, and get your first prediction
-              in under a minute.
-            </p>
-            <Link
-              href="/signup"
-              className="mt-8 inline-block rounded-lg bg-instrument px-6 py-3 text-sm font-medium text-ground-950 transition-opacity hover:opacity-90"
-            >
-              Start Free
-            </Link>
+            <div className="glass relative flex flex-col items-center overflow-hidden rounded-3xl px-6 py-16 text-center">
+              <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 h-72 w-72 rounded-full bg-sensor/10 blur-[120px] pointer-events-none" />
+              <h2 className="relative text-3xl font-medium tracking-tight sm:text-4xl" style={display}>
+                Put your scenes to work
+              </h2>
+              <p className="relative mt-3 max-w-md text-sm text-ground-400">
+                Create an account, upload a GeoTIFF, and get your first prediction
+                in under a minute.
+              </p>
+              <Link href="/signup" className="btn btn-filled relative mt-8">
+                Start Free
+              </Link>
+            </div>
           </Reveal>
         </div>
       </section>
 
       {/* ---- Contact Section ---- */}
-      <section id="contact" className="border-t border-ground-700 bg-ground-900/20">
+      <section id="contact" className="border-t border-ground-700/60 bg-ground-900/20">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <Reveal>
             <div className="text-center">
@@ -352,9 +355,9 @@ export default function Home() {
                       href={item.href}
                       target={item.href.startsWith("http") ? "_blank" : undefined}
                       rel={item.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                      className="group flex items-center gap-4 rounded-xl border border-ground-700 bg-ground-800/40 p-4 transition-all duration-300 hover:border-ground-400 hover:bg-ground-800/80"
+                      className="group flex items-center gap-4 rounded-xl glass-card p-4"
                     >
-                      <div className="rounded-lg bg-ground-900 p-2.5 border border-ground-700 transition-colors group-hover:border-ground-400 group-hover:bg-ground-800">
+                      <div className="rounded-lg glass p-2.5 transition-colors group-hover:border-sensor/40">
                         <item.icon className="h-5 w-5 text-ground-400 group-hover:text-instrument transition-colors" />
                       </div>
                       <div className="min-w-0">
@@ -382,13 +385,13 @@ export default function Home() {
       </section>
 
       {/* ---- Footer ---- */}
-      <footer className="border-t border-ground-700 bg-ground-950 px-6 py-16">
+      <footer className="border-t border-ground-700/60 bg-ground-950 px-6 py-16">
         <div className="mx-auto max-w-5xl">
           <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-5">
             {/* Brand column */}
             <div className="md:col-span-2 flex flex-col items-start gap-4">
               <Link href="/" className="flex items-center gap-2 group">
-                <div className="rounded-lg p-1 bg-ground-900 border border-ground-700 group-hover:border-ground-500 transition-colors">
+                <div className="rounded-lg p-1 glass group-hover:border-sensor/40 transition-colors">
                   <Satellite className="h-5 w-5 text-sensor" />
                 </div>
                 <span className="font-display font-medium text-lg tracking-tight text-instrument group-hover:text-white transition-colors">

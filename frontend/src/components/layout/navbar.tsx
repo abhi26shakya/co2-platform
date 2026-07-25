@@ -3,35 +3,60 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Satellite, Menu, X, ArrowRight } from "lucide-react";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+
+const navLinks = [
+  { name: "Home", href: "/" },
+  { name: "Platform", href: "#platform" },
+  { name: "Research", href: "#research" },
+  { name: "Documentation", href: "/docs" },
+  { name: "Contact", href: "#contact" },
+];
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [activeHash, setActiveHash] = useState("");
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const navLinks = [
-    { name: "Home", href: "/" },
-    { name: "Platform", href: "#platform" },
-    { name: "Research", href: "#research" },
-    { name: "Documentation", href: "/docs" },
-    { name: "Contact", href: "#contact" },
-  ];
+  useEffect(() => {
+    const sectionIds = navLinks
+      .filter((l) => l.href.startsWith("#"))
+      .map((l) => l.href.slice(1));
+    const sections = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (sections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.find((e) => e.isIntersecting);
+        if (visible) setActiveHash(`#${visible.target.id}`);
+      },
+      { rootMargin: "-45% 0px -45% 0px" }
+    );
+    sections.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className={`sticky top-0 z-50 w-full transition-all duration-300 ${scrolled ? "pt-3 px-4" : "pt-0 px-0"}`}>
-      <nav 
+    <div
+      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+        scrolled ? "pt-3 px-4" : "pt-0 px-0"
+      }`}
+    >
+      <nav
         className={`mx-auto max-w-5xl w-full transition-all duration-300 ${
-          scrolled 
-            ? "rounded-full border bg-ground-950/85 shadow-[0_8px_32px_rgba(0,0,0,0.6)] neon-border-animate" 
-            : "border-b border-ground-700/40 bg-ground-950/40"
-        } backdrop-blur-md`}
+          scrolled
+            ? "glass-strong rounded-full shadow-[0_8px_32px_-8px_var(--shadow-color)] neon-border-animate"
+            : "border-b border-ground-700/40 bg-ground-950/40 backdrop-blur-md"
+        }`}
       >
         <div className="px-6">
           <div className="flex h-16 items-center justify-between">
@@ -46,20 +71,31 @@ export function Navbar() {
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-1.5">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="relative rounded-full px-4 py-1.5 text-sm font-medium text-ground-400 transition-all duration-200 hover:bg-ground-800/60 hover:text-instrument active:scale-[0.97]"
-                >
-                  {link.name}
-                </Link>
-              ))}
+            <div className="hidden md:flex items-center gap-1">
+              {navLinks.map((link) => {
+                const isActive = link.href.startsWith("#") && activeHash === link.href;
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className={`relative rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
+                      isActive
+                        ? "text-instrument bg-ground-800/70"
+                        : "text-ground-400 hover:bg-ground-800/50 hover:text-instrument"
+                    }`}
+                  >
+                    {link.name}
+                    {isActive && (
+                      <span className="absolute inset-x-3 -bottom-px h-px bg-sensor/70" aria-hidden />
+                    )}
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Desktop CTAs */}
-            <div className="hidden md:flex items-center gap-5">
+            <div className="hidden md:flex items-center gap-3">
+              <ThemeToggle />
               <Link
                 href="/login"
                 className="text-sm font-medium text-ground-400 hover:text-instrument transition-colors"
@@ -68,7 +104,7 @@ export function Navbar() {
               </Link>
               <Link
                 href="/signup"
-                className="group flex items-center gap-1.5 rounded-full px-4.5 py-2 text-sm font-medium text-ground-950 transition-all duration-300 hover:shadow-[0_0_25px_rgba(52,211,153,0.35)] active:scale-[0.97] neon-btn-animate"
+                className="btn btn-filled group py-2 px-4.5 text-sm"
               >
                 Start Free
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -76,7 +112,8 @@ export function Navbar() {
             </div>
 
             {/* Mobile Menu Button */}
-            <div className="flex md:hidden">
+            <div className="flex items-center gap-2 md:hidden">
+              <ThemeToggle />
               <button
                 onClick={() => setIsOpen(!isOpen)}
                 type="button"
@@ -97,8 +134,11 @@ export function Navbar() {
 
         {/* Mobile Menu Panel */}
         {isOpen && (
-          <div className="md:hidden border-t border-ground-700/50 bg-ground-950/95 px-6 py-5 rounded-b-3xl transition-all duration-300" id="mobile-menu">
-            <div className="space-y-2 pb-3">
+          <div
+            className="md:hidden border-t border-ground-700/50 glass-strong px-6 py-5 rounded-b-3xl transition-all duration-300"
+            id="mobile-menu"
+          >
+            <div className="space-y-1 pb-3">
               {navLinks.map((link) => (
                 <Link
                   key={link.name}
@@ -121,7 +161,7 @@ export function Navbar() {
               <Link
                 href="/signup"
                 onClick={() => setIsOpen(false)}
-                className="block rounded-full bg-instrument py-2.5 text-center text-base font-medium text-ground-950 transition-opacity hover:opacity-90 shadow-lg"
+                className="btn btn-filled w-full py-2.5 text-base"
               >
                 Start Free
               </Link>
