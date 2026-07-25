@@ -70,7 +70,20 @@ export function ShareModal({
     aiSummary: true,
   });
 
-  // Generate or load existing share config on open
+  function generateNewId() {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
+    for (let i = 0; i < 9; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setShareId(result);
+  }
+
+  // Generate or load existing share config on open. Reactive to `isOpen`
+  // rather than mount, since the modal stays mounted between opens and must
+  // re-derive its state each time it's opened for a (possibly different)
+  // resource — not expressible as a lazy useState initializer.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (isOpen) {
       // Look for existing share link for this resource
@@ -100,15 +113,6 @@ export function ShareModal({
       }
     }
   }, [isOpen, resourceType, resourceId]);
-
-  const generateNewId = () => {
-    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-    let result = "";
-    for (let i = 0; i < 9; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setShareId(result);
-  };
 
   if (!isOpen) return null;
 

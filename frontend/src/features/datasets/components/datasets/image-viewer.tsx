@@ -19,6 +19,7 @@ const MAX_ZOOM = 12;
 export function ImageViewer({ src, title, subtitle, onClose }: Props) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
   const dragging = useRef<{ x: number; y: number } | null>(null);
 
   const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
@@ -73,17 +74,21 @@ export function ImageViewer({ src, title, subtitle, onClose }: Props) {
       </div>
 
       <div
-        className={cn("flex-1 overflow-hidden", dragging.current ? "cursor-grabbing" : "cursor-grab")}
+        className={cn("flex-1 overflow-hidden", isDragging ? "cursor-grabbing" : "cursor-grab")}
         onWheel={(e) => zoomBy(e.deltaY < 0 ? 1.15 : 0.87)}
         onPointerDown={(e) => {
           dragging.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+          setIsDragging(true);
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
           if (!dragging.current) return;
           setOffset({ x: e.clientX - dragging.current.x, y: e.clientY - dragging.current.y });
         }}
-        onPointerUp={() => (dragging.current = null)}
+        onPointerUp={() => {
+          dragging.current = null;
+          setIsDragging(false);
+        }}
       >
         <div className="flex h-full items-center justify-center">
           <img
@@ -93,7 +98,7 @@ export function ImageViewer({ src, title, subtitle, onClose }: Props) {
             className="max-h-full max-w-full select-none"
             style={{
               transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-              transition: dragging.current ? "none" : "transform 120ms ease-out",
+              transition: isDragging ? "none" : "transform 120ms ease-out",
             }}
           />
         </div>

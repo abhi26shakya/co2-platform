@@ -31,12 +31,7 @@ export default function SharedLinksPage() {
   const [links, setLinks] = useState<SharedLinkItem[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Load links from localStorage
-  useEffect(() => {
-    loadLinks();
-  }, []);
-
-  const loadLinks = () => {
+  function loadLinks() {
     const raw = localStorage.getItem("emissia_shared_links_list");
     if (raw) {
       try {
@@ -45,7 +40,12 @@ export default function SharedLinksPage() {
         setLinks([]);
       }
     }
-  };
+  }
+
+  // Load links from localStorage
+  useEffect(() => {
+    loadLinks();
+  }, []);
 
   const saveLinks = (updated: SharedLinkItem[]) => {
     setLinks(updated);
