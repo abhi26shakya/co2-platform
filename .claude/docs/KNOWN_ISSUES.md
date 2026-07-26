@@ -251,30 +251,6 @@ Issues requiring immediate attention.
 
 Issues affecting important functionality.
 
-## KI-002 — Frontend lint now runs but exposes 95 pre-existing findings
-
-**Classification**: Bug / Technical Debt
-**Discovered**: 2026-07-26, immediately after fixing KI-001 (see Resolved
-Issues) — the lint tool had never successfully run before, so these
-findings were invisible until now.
-**Description**: `npm run lint` now executes and correctly exits 1 with
-60 errors / 35 warnings: 43 `@typescript-eslint/no-explicit-any`, 33
-`@typescript-eslint/no-unused-vars`, 11 `react-hooks/set-state-in-effect`,
-2 `react-hooks/refs` (accessing `.current` during render in
-`image-viewer.tsx`), 2 `react-hooks/immutability`, 2 `prefer-const`, 1
-`react-hooks/exhaustive-deps`, 1 `next/no-img-element`.
-**Impact**: `frontend` CI's `lint` step will now correctly fail until
-these are addressed — this is expected/correct behavior of a working
-lint pipeline, not a new regression. The `react-hooks/set-state-in-effect`
-and `react-hooks/refs` findings (`settings-provider.tsx`,
-`image-viewer.tsx`) look like genuine bugs (cascading renders, stale ref
-reads during render) rather than style nits and should be prioritized
-over the `any`/unused-var cleanup.
-**Resolution Plan**: Unscheduled — needs a dedicated cleanup pass
-(candidate for `/refactor` or `/cleanup`). Not fixed in this session by
-explicit user decision, to keep the lint-tooling fix (KI-001) isolated
-from a much larger codebase cleanup.
-
 ---
 
 # Medium Priority Issues
@@ -446,6 +422,99 @@ of via `FlatCompat`. Changed the `lint` script in `package.json` from
 `next lint` to `eslint .`.
 **Related**: Exposed 95 real pre-existing lint findings, tracked as
 KI-002.
+
+## KI-002 — Frontend lint exposed 95 pre-existing findings (RESOLVED)
+
+**Resolution date**: 2026-07-27
+**Original description**: `npm run lint` executed (after KI-001) and
+correctly exited 1 with 60 errors / 35 warnings: 43
+`@typescript-eslint/no-explicit-any`, 33 `@typescript-eslint/no-unused-vars`,
+11 `react-hooks/set-state-in-effect`, 2 `react-hooks/refs`, 2
+`react-hooks/immutability`, 2 `prefer-const`, 1
+`react-hooks/exhaustive-deps`, 1 `next/no-img-element`. By the time this
+was picked up the count had drifted to 55 errors / 23 warnings from other
+work in between.
+**Solution implemented**:
+- `react-hooks/set-state-in-effect` (the "genuine bugs" per the original
+  note): converted mount-only localStorage-init effects to lazy `useState`
+  initializers (`settings-provider.tsx`, `(protected)/settings/page.tsx`,
+  `(protected)/shared-links/page.tsx`); converted effects that adjust
+  state in response to a prop/context changing (`user`, Settings Context,
+  `shareId`, `isOpen`) to React's documented render-time-adjust pattern
+  (track the previous key in state, compare, update inline) instead of an
+  effect + `useEffect` dep array (see React's "You Might Not Need an
+  Effect" guide). One case (`share-modal.tsx`) genuinely needs to stay an
+  effect because it calls
+  `Math.random()` for a new share ID, which React's purity rules forbid
+  during render — kept as an effect with a *correctly targeted*
+  `eslint-disable-next-line` (the original disable comment was on the
+  wrong line and silently did nothing, which is why it was flagged as
+  "unused" while the violation still fired). Also converted a
+  `(protected)/processing/page.tsx` effect that derived `activeStage`/
+  `activeStep`/`completedSteps`/`logs` purely from `progress` into plain
+  render-time derivation (`useMemo` for the wall-clock-flavored log list),
+  and replaced two boolean "have I already triggered X" effect guards with
+  `useRef` instead of `useState` (mutating a ref doesn't re-render, so it
+  was never state in the first place).
+- `@typescript-eslint/no-explicit-any`: replaced with real types
+  (`ReportOut`, `RecentUpload`, `TimeseriesPoint`/`DistributionBucket`,
+  a new `SelectedFacility` type for the map store's polymorphic
+  selection) everywhere a real type existed. `emission-map.tsx`'s ~20
+  Cesium-related `any`s are a deliberate exception: Cesium is loaded as a
+  global `<script>` tag (see main CLAUDE.md), not the npm package, so
+  there's no TS surface for it; a file-level disable with a comment
+  documents why (adding the `cesium` package as a devDependency purely
+  for its ~80MB of `.d.ts` files, or hand-rolling a partial declaration
+  file for the large surface used, were both judged worse than an honest
+  `any`).
+- Everything else (unused vars/imports, `prefer-const`,
+  `next/no-img-element` on a genuinely external/decorative QR image) was
+  a direct fix.
+**Verification**: `npm run lint` / `tsc --noEmit` / `vitest run` (83/83)
+/ `next build` all clean. Also verified live in a browser (not just
+statically) — settings page (profile/AI-preferences/appearance tabs,
+including an actual theme switch), the processing page's derived
+progress/stage/log rendering, the shared-links empty state, and the full
+`ShareModal` → `/share/[id]` round trip (not-found path and the
+config-found + view-increment path) — no new console errors in any of
+them.
+**Related**: Backend/ml-service CI failures found in the same pass,
+tracked as KI-003.
+
+## KI-003 — Backend/ml-service CI failures, pre-existing and unrelated to KI-002 (RESOLVED)
+
+**Resolution date**: 2026-07-27
+**Original description**: All three CI jobs (`backend`, `ml-service`,
+`frontend`) were failing on `main`, confirmed pre-existing by checking the
+CI run immediately prior to the change that surfaced this (i.e. not
+caused by that change):
+- `ml-service`: `pytest -q` failed to even collect `tests/test_predict.py`
+  — `starlette.testclient` requires `httpx`, which wasn't installed
+  (`ml-service/requirements.txt` never listed it, and the CI step only
+  ever did `pip install -r requirements.txt pytest ruff`).
+- `backend`: `ruff check .` failed on two files under `scripts/` (a
+  standalone CLI script, not imported by the app or its tests) —
+  `scripts/load_co2.py:41` line too long (106 > 100), and
+  `scripts/upload_seed_image.py:1` unsorted imports.
+- Separately (not a CI failure, but hit while reproducing `backend`
+  locally): `rasterio` has no prebuilt wheel for macOS arm64, forcing a
+  from-source build that needs system GDAL headers not present on a
+  fresh machine. Not itself a bug — arm64 dev machines need either
+  `brew install gdal` or to build/run the backend in Docker (which uses
+  `python:3.12-slim`, has prebuilt wheels) — but worth knowing before
+  assuming a local `pip install -r requirements-dev.txt` failure means
+  something is broken.
+**Solution implemented**: Added `httpx` to the ml-service CI install line
+in `.github/workflows/ci.yml`. Fixed the two `scripts/` files directly
+(shortened the string, let `ruff --fix` sort the import).
+**Verification**: Confirmed against the *exact pinned* `ruff==0.11.10`
+(matching `requirements-dev.txt`/CI, not whatever newer version might be
+on a dev machine globally — a newer ruff surfaced an unrelated `UP042`
+finding elsewhere that CI's pinned version doesn't have, which would have
+been a false lead). `ml-service`'s `ruff check .` + `pytest -q` (2 passed)
+verified inside a `python:3.12-slim` container to match what CI actually
+runs, since the host's Python 3.14/arm64 hits the `rasterio` wheel issue
+above.
 
 ---
 
