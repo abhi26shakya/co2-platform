@@ -45,8 +45,8 @@ Date: 2026-07-26
 
 # Current Focus
 
-- Map Section redesign, Milestone 1 (layout/UX restructure) complete — see
-  M-004. Next up: Milestone 2 (MapLibre GL 2D mode + 2D/3D toggle).
+- Map Section redesign, Milestone 2 (MapLibre GL 2D mode + 2D/3D toggle)
+  complete — see M-005. Next up: Milestone 3 (GIS tools/export hardening).
 - Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
@@ -98,6 +98,42 @@ share dialog — no new console errors).
 Deferred to later milestones: a 2D MapLibre GL mode toggleable against the
 existing Cesium 3D globe, backend-integrated export/share (currently
 client-only simulation), and a glassmorphism visual pass.
+
+### M-005 — Map Section redesign, Milestone 2: MapLibre GL 2D mode (this session)
+
+Added a real 2D map mode (MapLibre GL JS) toggleable against the existing
+CesiumJS 3D globe via a new `ModeToggle` control, replacing the dead
+`leaflet`/`react-leaflet` dependencies (removed — see `KNOWN_ISSUES.md`)
+with an actually-used one. New engine component
+`features/maps/components/map-canvas/maplibre-map.tsx` mirrors
+`emission-map.tsx`'s exact prop contract so `maps/page.tsx` swaps engines
+by choosing which dynamic import to render, no branching duplicated.
+`map-store.ts` gained a persisted `mapMode: "2d" | "3d"` field.
+
+To avoid drift between the two engines, shared pure logic was factored out
+of `emission-map.tsx` into new modules both engines import: gas-plume
+color/offset math (`features/maps/lib/gas-plume.ts`), raster basemap tile
+URLs (`features/maps/lib/basemap-tiles.ts`), and mode-aware catalogs for
+basemaps and visualization modes (`basemap-catalog.ts`,
+`visualization-mode-catalog.ts` — "Terrain 3D" and "3D Extruded Columns"
+have no 2D equivalent, so `BasemapSelector`/`VisualizationModeSelector`
+filter them out when `mapMode === "2d"`, falling back to a supported mode
+without mutating the user's stored 3D preference). GIS drawing tools
+(polygon/rectangle/circle/polyline/distance/area/picker) were reimplemented
+for MapLibre's click/mousemove events but call the same `geo-math.ts`
+builders as the Cesium engine, plus a new `haversineDistanceM` helper for
+2D lng/lat-based distance (Cesium's `Cartesian3.distance` has no
+equivalent in a flat lng/lat frame).
+
+12 new tests added (haversine, basemap/visualization-mode catalogs,
+`mapMode` store coverage), 70/70 passing; typecheck/lint/build clean.
+Manually verified in-browser: 2D/3D toggle, basemap switching in both
+modes, GIS rectangle drawing with live + final measurement in 2D, facility
+alert click → camera fly-to → inspector drawer in 2D, and re-verified the
+existing 3D mode still works with no regression — no new console errors.
+
+Deferred to later milestones: backend-integrated export/share, a
+glassmorphism visual pass, and further GIS-tool hardening.
 
 Reference:
 

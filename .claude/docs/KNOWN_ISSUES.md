@@ -332,6 +332,12 @@ regressions during extraction.
 
 ## Debt Item: Legacy `leaflet` / `react-leaflet` dependencies
 
+**Status: Resolved (2026-07-26)** — Map Section Redesign Milestone 2.
+`leaflet`, `react-leaflet`, and `@types/leaflet` were removed from
+`frontend/package.json` (`npm uninstall`) as part of adding the MapLibre GL
+2D map mode — the dead 2D dependency was replaced with an actually-wired-up
+one. See `PROJECT_PROGRESS.md` M-005.
+
 Description: Both packages remain in `frontend/package.json` but zero
 files under `src/` reference them (confirmed via grep) since the
 CesiumJS migration.

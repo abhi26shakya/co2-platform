@@ -5,6 +5,8 @@ import { useMapStore } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { Compass } from "lucide-react";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
+import { BASEMAP_TILES } from "@/features/maps/lib/basemap-tiles";
+import { getGasColorHex, getGasPlumes, hexToRgb, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
 import {
   buildCircleResult,
   buildPickerResult,
@@ -33,92 +35,6 @@ interface Props {
   comparisonType?: string;
   cameraTarget?: { lat: number; lon: number } | null;
 }
-
-interface PlumePoint {
-  lat: number;
-  lon: number;
-  intensity: number;
-  value: number;
-  unit: string;
-}
-
-function hexToRgb(hex: string) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
-    : null;
-}
-
-function getGasColorHex(gas: string, val: number) {
-  const normVal = Math.min(1, Math.max(0, val));
-  if (gas === "ch4") {
-    if (normVal < 0.3) return "#3b82f6";
-    if (normVal < 0.6) return "#06b6d4";
-    return "#a855f7";
-  }
-  if (gas === "no2") {
-    if (normVal < 0.3) return "#facc15";
-    if (normVal < 0.6) return "#f97316";
-    return "#ef4444";
-  }
-  if (gas === "so2") {
-    if (normVal < 0.5) return "#8b5cf6";
-    return "#ec4899";
-  }
-  if (gas === "co") {
-    if (normVal < 0.5) return "#14b8a6";
-    return "#f97316";
-  }
-  if (normVal < 0.2) return "#22c55e";
-  if (normVal < 0.4) return "#eab308";
-  if (normVal < 0.6) return "#f97316";
-  if (normVal < 0.8) return "#ef4444";
-  return "#7f1d1d";
-}
-
-const getGasPlumes = (gas: string, baseHotspots: MapHotspot[]): PlumePoint[] => {
-  return baseHotspots.map((h, i) => {
-    let latOffset = 0;
-    let lonOffset = 0;
-    let valueMultiplier = 1.0;
-    let unit = "ppm";
-
-    if (gas === "ch4") {
-      latOffset = 0.02 * Math.sin(i);
-      lonOffset = 0.02 * Math.cos(i);
-      valueMultiplier = 1950.0;
-      unit = "ppb";
-    } else if (gas === "no2") {
-      latOffset = -0.015 * Math.cos(i * 1.5);
-      lonOffset = 0.015 * Math.sin(i * 1.5);
-      valueMultiplier = 95.0;
-      unit = "ppb";
-    } else if (gas === "so2") {
-      latOffset = 0.03 * Math.sin(i * 2);
-      lonOffset = -0.01 * Math.cos(i * 2);
-      valueMultiplier = 45.0;
-      unit = "ppb";
-    } else if (gas === "co") {
-      latOffset = -0.01 * Math.cos(i * 0.5);
-      lonOffset = -0.02 * Math.sin(i * 0.5);
-      valueMultiplier = 120.0;
-      unit = "ppb";
-    } else {
-      latOffset = 0;
-      lonOffset = 0;
-      valueMultiplier = 415.0;
-      unit = "ppm";
-    }
-
-    return {
-      lat: h.lat + latOffset,
-      lon: h.lon + lonOffset,
-      intensity: h.intensity,
-      value: h.intensity * valueMultiplier,
-      unit,
-    };
-  });
-};
 
 export default function EmissionMap({
   plants,
@@ -165,7 +81,7 @@ export default function EmissionMap({
     const Cesium = (window as any).Cesium;
 
     const initialBasemapProvider = new Cesium.UrlTemplateImageryProvider({
-      url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      url: BASEMAP_TILES.dark[0],
       attribution: "&copy; OpenStreetMap &copy; CARTO",
     });
 
@@ -260,23 +176,15 @@ export default function EmissionMap({
 
     let provider;
     if (activeBasemap === "satellite") {
-      provider = new Cesium.UrlTemplateImageryProvider({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      });
+      provider = new Cesium.UrlTemplateImageryProvider({ url: BASEMAP_TILES.satellite[0] });
     } else if (activeBasemap === "hybrid") {
-      provider = new Cesium.UrlTemplateImageryProvider({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      });
+      provider = new Cesium.UrlTemplateImageryProvider({ url: BASEMAP_TILES.hybrid[0] });
       viewer.imageryLayers.addImageryProvider(provider);
-      provider = new Cesium.UrlTemplateImageryProvider({
-        url: "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
-      });
+      provider = new Cesium.UrlTemplateImageryProvider({ url: BASEMAP_TILES.hybrid[1] });
     } else if (activeBasemap === "osm") {
       provider = new Cesium.OpenStreetMapImageryProvider({ url: "https://a.tile.openstreetmap.org/" });
     } else {
-      provider = new Cesium.UrlTemplateImageryProvider({
-        url: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-      });
+      provider = new Cesium.UrlTemplateImageryProvider({ url: BASEMAP_TILES.dark[0] });
     }
 
     viewer.imageryLayers.addImageryProvider(provider);
@@ -374,20 +282,9 @@ export default function EmissionMap({
           const baseHeight = 50000 * valueNorm;
           const timeOffset = idx * 0.5;
 
-          let finalColorHex = colorHex;
-          let finalColor = color;
-
-          if (comparisonMode) {
-            if (comparisonType === "difference-layer") {
-              const indexSum = Math.floor(plume.lat * 100 + plume.lon * 100);
-              finalColorHex = indexSum % 2 === 0 ? "#3b82f6" : "#ef4444";
-              finalColor = Cesium.Color.fromCssColorString(finalColorHex);
-            } else if (comparisonType === "confidence-layer") {
-              const confNorm = plume.intensity;
-              finalColorHex = confNorm > 0.8 ? "#10b981" : confNorm > 0.6 ? "#f59e0b" : "#ef4444";
-              finalColor = Cesium.Color.fromCssColorString(finalColorHex);
-            }
-          }
+          const finalColorHex = resolveComparisonColorHex(colorHex, plume, comparisonMode, comparisonType);
+          const finalColor =
+            finalColorHex === colorHex ? color : Cesium.Color.fromCssColorString(finalColorHex);
 
           const pulseHeightProperty = new Cesium.CallbackProperty(() => {
             const time = viewer.clock.currentTime.secondsOfDay;

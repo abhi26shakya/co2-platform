@@ -8,6 +8,7 @@ import {
   circleAreaM2,
   formatAreaKm2,
   formatDistanceKm,
+  haversineDistanceM,
   m2ToKm2,
   metersToKm,
   polygonAreaM2,
@@ -78,6 +79,24 @@ describe("circleAreaM2", () => {
 
   it("is zero for zero radius", () => {
     expect(circleAreaM2(0)).toBe(0);
+  });
+});
+
+describe("haversineDistanceM", () => {
+  it("returns 0 for identical points", () => {
+    expect(haversineDistanceM({ lat: 24.06, lon: 82.67 }, { lat: 24.06, lon: 82.67 })).toBe(0);
+  });
+
+  it("returns a positive distance that grows with separation", () => {
+    const near = haversineDistanceM({ lat: 0, lon: 0 }, { lat: 0, lon: 0.01 });
+    const far = haversineDistanceM({ lat: 0, lon: 0 }, { lat: 0, lon: 0.02 });
+    expect(near).toBeGreaterThan(0);
+    expect(far).toBeGreaterThan(near);
+  });
+
+  it("matches the known ~111.19 km per degree of latitude at the equator", () => {
+    const distance = haversineDistanceM({ lat: 0, lon: 0 }, { lat: 1, lon: 0 });
+    expect(distance / 1000).toBeCloseTo(111.19, 0);
   });
 });
 

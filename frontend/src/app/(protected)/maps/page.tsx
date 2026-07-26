@@ -11,6 +11,8 @@ import { useDrawing } from "@/features/maps/hooks/use-drawing";
 import { useMapExport } from "@/features/maps/hooks/use-map-export";
 import { enrichPlants, buildFacilityHistoricalSeries, timeScaleFactor } from "@/features/maps/lib/enrich-plants";
 import { buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
+import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/lib/visualization-mode-catalog";
+import { DEFAULT_2D_BASEMAP, isBasemapSupported } from "@/features/maps/lib/basemap-catalog";
 
 import { BasemapSelector } from "@/features/maps/components/layer-panel/basemap-selector";
 import { GasLayerControls } from "@/features/maps/components/layer-panel/gas-layer-controls";
@@ -25,13 +27,24 @@ import { InspectorDrawer, type InspectedFacility } from "@/features/maps/compone
 import { AlertsBadge, type MapAlert } from "@/features/maps/components/alerts/alerts-badge";
 import { ExportMenu } from "@/features/maps/components/export-share/export-menu";
 import { ShareDialog } from "@/features/maps/components/export-share/share-dialog";
+import { ModeToggle } from "@/features/maps/components/map-controls/mode-toggle";
 
-// Cesium loads on client and requires script files in head
+// Cesium loads on client and requires script files in head; both engines are ssr:false since they
+// touch window/DOM APIs directly.
 const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/emission-map"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[40rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
       Loading Cesium 3D Globe...
+    </div>
+  ),
+});
+
+const MapLibreMap = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[40rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
+      Loading 2D map…
     </div>
   ),
 });
@@ -66,12 +79,20 @@ export default function MapPage() {
   const { data: hotspots = [] } = useHotspots();
   const enrichedPlants = enrichPlants(plants);
 
-  const { activeBasemap, setActiveBasemap, selectedFacility, setSelectedFacility, gases, toggleGas, setGasOpacity } =
+  const { activeBasemap, setActiveBasemap, mapMode, setMapMode, selectedFacility, setSelectedFacility, gases, toggleGas, setGasOpacity } =
     useMapStore();
   const { activePanel, togglePanel, inspectorDrawerOpen, openInspectorDrawer, closeInspectorDrawer, alertsOpen, setAlertsOpen } =
     useMapUiStore();
 
   const [visualizationMode, setVisualizationMode] = useState("volume3d");
+  // volume3d/animated modes have no 2D equivalent — fall back without mutating the stored
+  // preference, so it's restored automatically when switching back to 3D.
+  const effectiveVisualizationMode = isModeSupported(visualizationMode, mapMode)
+    ? visualizationMode
+    : DEFAULT_2D_VISUALIZATION_MODE;
+  // Same non-mutating fallback for basemaps with no 2D equivalent (e.g. "Terrain 3D") — the
+  // selector and both map engines all read this instead of the raw stored value.
+  const effectiveBasemap = isBasemapSupported(activeBasemap, mapMode) ? activeBasemap : DEFAULT_2D_BASEMAP;
   const [showLayers, setShowLayers] = useState<ShowLayers>(DEFAULT_SHOW_LAYERS);
 
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("monthly");
@@ -114,7 +135,7 @@ export default function MapPage() {
   }
 
   const exportData = useMapExport(() => ({
-    activeBasemap,
+    activeBasemap: effectiveBasemap,
     activeGasKeys: Object.keys(gases).filter((k) => gases[k].enabled),
     plants: enrichedPlants.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, sector: p.sector, latest_prediction: p.latest_prediction })),
     hotspots: timeScaledHotspots.map((h) => ({ lat: h.lat, lon: h.lon, emission_tonnes_per_year: h.emission_tonnes_per_year })),
@@ -152,7 +173,7 @@ export default function MapPage() {
     const activeGasKeys = Object.keys(gases)
       .filter((k) => gases[k].enabled)
       .join(",");
-    const cameraParams = `lat=22.50&lon=79.50&zoom=9&basemap=${activeBasemap}&gases=${activeGasKeys}`;
+    const cameraParams = `lat=22.50&lon=79.50&zoom=9&basemap=${effectiveBasemap}&gases=${activeGasKeys}`;
     setShareConfigLink(`https://co2-platform-nine.vercel.app/map?${cameraParams}`);
     setShareLinkOpen(true);
   };
@@ -212,8 +233,8 @@ export default function MapPage() {
             )}
             {activePanel === "layers" && (
               <>
-                <BasemapSelector activeBasemap={activeBasemap} onSelect={setActiveBasemap} />
-                <VisualizationModeSelector selectedMode={visualizationMode} onSelect={setVisualizationMode} />
+                <BasemapSelector activeBasemap={effectiveBasemap} mapMode={mapMode} onSelect={setActiveBasemap} />
+                <VisualizationModeSelector selectedMode={effectiveVisualizationMode} mapMode={mapMode} onSelect={setVisualizationMode} />
               </>
             )}
             {activePanel === "gas" && <GasLayerControls gases={gases} onToggle={toggleGas} onOpacityChange={setGasOpacity} />}
@@ -253,27 +274,51 @@ export default function MapPage() {
           )}
 
           <div className="relative h-[42rem]">
-            <EmissionMap
-              plants={enrichedPlants}
-              hotspots={timeScaledHotspots}
-              showPlants={showLayers.plants}
-              showHotspots={showLayers.heatmap}
-              selectedMode={visualizationMode}
-              activeBasemap={activeBasemap}
-              onSelectFacility={(fac) => {
-                setSelectedFacility(fac);
-                openInspectorDrawer();
-              }}
-              drawingMode={drawing.drawingMode}
-              comparisonMode={comparisonMode}
-              showLayers={showLayers}
-              onDrawingComplete={drawing.addDrawing}
-              onLiveMeasurement={drawing.setLiveMeasurement}
-              clearTrigger={drawing.clearTrigger}
-              comparisonType={comparisonType}
-              cameraTarget={cameraTarget}
-            />
+            {mapMode === "2d" ? (
+              <MapLibreMap
+                plants={enrichedPlants}
+                hotspots={timeScaledHotspots}
+                showPlants={showLayers.plants}
+                showHotspots={showLayers.heatmap}
+                selectedMode={effectiveVisualizationMode}
+                activeBasemap={effectiveBasemap}
+                onSelectFacility={(fac) => {
+                  setSelectedFacility(fac);
+                  openInspectorDrawer();
+                }}
+                drawingMode={drawing.drawingMode}
+                comparisonMode={comparisonMode}
+                showLayers={showLayers}
+                onDrawingComplete={drawing.addDrawing}
+                onLiveMeasurement={drawing.setLiveMeasurement}
+                clearTrigger={drawing.clearTrigger}
+                comparisonType={comparisonType}
+                cameraTarget={cameraTarget}
+              />
+            ) : (
+              <EmissionMap
+                plants={enrichedPlants}
+                hotspots={timeScaledHotspots}
+                showPlants={showLayers.plants}
+                showHotspots={showLayers.heatmap}
+                selectedMode={effectiveVisualizationMode}
+                activeBasemap={effectiveBasemap}
+                onSelectFacility={(fac) => {
+                  setSelectedFacility(fac);
+                  openInspectorDrawer();
+                }}
+                drawingMode={drawing.drawingMode}
+                comparisonMode={comparisonMode}
+                showLayers={showLayers}
+                onDrawingComplete={drawing.addDrawing}
+                onLiveMeasurement={drawing.setLiveMeasurement}
+                clearTrigger={drawing.clearTrigger}
+                comparisonType={comparisonType}
+                cameraTarget={cameraTarget}
+              />
+            )}
 
+            <ModeToggle mode={mapMode} onChange={setMapMode} />
             <AlertsBadge open={alertsOpen} onToggle={() => setAlertsOpen(!alertsOpen)} onSelectAlert={handleSelectAlert} />
             <LayerToggleOverlay showLayers={showLayers} onChange={setShowLayers} />
             <IntensityLegend timeFactor={timeFactor} />
