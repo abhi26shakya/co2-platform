@@ -268,22 +268,34 @@ live data all render fine). Ruled out so far:
 **Impact**: Anyone visiting the deployed site's Maps section in 3D mode
 loses their browser tab. This was the default mode, so it very likely hit
 every first-time visitor.
-**Root cause**: Not yet identified. Suspected production-build-specific
-(minification/chunking/timing) interaction with Cesium's global `<script>`
-loading, or a GPU/renderer crash specific to the deployment's runtime —
-neither confirmed. Following leads require access this session didn't
-have: `chrome://gpu` / `chrome://crashes` on the affected browser (blocked
-for browser-automation tools), and an Incognito-window repro to rule out
-interfering extensions.
+**Root cause**: Not yet identified, but narrowed significantly. Ran the
+exact same code as a local production build (`next build && next start`,
+same Cesium version, real backend, logged in, 3D forced via localStorage)
+and it does **not** crash — stable 10+ seconds, only the separate
+pre-existing "blank globe" rendering issue, not a crash. The user
+independently confirmed the same: 3D works fine against the local
+production build. This rules out the app code / Cesium usage itself as
+the cause and narrows it to something specific to the Vercel deployment
+or the network path to it — during the same investigation, the user's
+machine also showed intermittent TLS-handshake timeouts reaching
+`co2-platform-nine.vercel.app` specifically (general internet and the
+Cesium CDN both responded instantly in the same window), which may or may
+not be related. Not yet tested: reproducing from a different network
+(rules out ISP/routing to Vercel specifically), and `chrome://gpu` /
+`chrome://crashes` output right after a crash (blocked for
+browser-automation tools — needs the user to check directly).
 **Stopgap applied**: Changed `getSavedMapMode()`'s fallback in
 `frontend/src/features/maps/store/map-store.ts` from `"3d"` to `"2d"`, so
 new visitors (no `emissia-map-mode` in localStorage yet) land on the
 working 2D mode instead of crashing. This does **not** fix 3D itself —
-toggling to 3D manually still crashes — and does not help visitors who
-already have `"3d"` persisted in localStorage from a prior visit.
-**Resolution Plan**: Unscheduled — needs the browser-side diagnostics
-above (chrome://gpu/crashes, Incognito repro) before a real root-cause fix
-can be attempted.
+toggling to 3D manually still crashes on the deployed site — and does not
+help visitors who already have `"3d"` persisted in localStorage from a
+prior visit.
+**Resolution Plan**: Unscheduled — given the app code is now confirmed
+not at fault, next step is Vercel-side: check the project's deployment
+logs/function logs on vercel.com for anything unusual, and try the
+different-network test above to isolate ISP/routing vs. a genuine
+Vercel-deployment issue.
 
 ---
 
