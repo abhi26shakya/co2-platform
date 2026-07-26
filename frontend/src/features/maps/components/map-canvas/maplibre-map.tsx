@@ -220,6 +220,9 @@ export default function MapLibreMap({
       pitch: 0,
       bearing: storeCam.bearing,
       attributionControl: false,
+      // Needed so canvas.toBlob()/toDataURL() (PNG export) doesn't read a blanked buffer —
+      // WebGL clears the drawing buffer after each frame by default.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
 
     map.on("load", () => {
@@ -533,7 +536,11 @@ export default function MapLibreMap({
   };
 
   return (
-    <div ref={mapWrapperRef} className="relative w-full h-full min-h-[40rem] rounded-xl overflow-hidden border border-ground-700 bg-ground-950">
+    <div
+      ref={mapWrapperRef}
+      data-map-viewport="maplibre"
+      className="relative w-full h-full min-h-[40rem] rounded-xl overflow-hidden border border-ground-700 bg-ground-950"
+    >
       {!mapReady && (
         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3 z-15 bg-ground-950/80 backdrop-blur-sm text-sm text-ground-400">
           <span className="h-6 w-6 rounded-full border-2 border-dashed border-sensor animate-spin" />

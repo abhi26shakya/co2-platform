@@ -45,10 +45,11 @@ Date: 2026-07-26
 
 # Current Focus
 
-- Map Section redesign, Milestone 4 (glassmorphism visual pass) complete —
-  see M-007. Visual-only, no behavior changes. Next up (user chose to do
-  both): a real backend-integrated viewport export endpoint, deferred
-  twice now (see M-006).
+- Map Section redesign, Milestone 5 (real PDF/PNG map export) complete —
+  see M-008. Required no backend changes: `GET /map/plants`/`GET /map/hotspots`
+  and `POST /reports` already existed and worked (an earlier claim in this
+  session that the map endpoints were missing was wrong and corrected —
+  see M-008 for the full story). GeoTIFF stays simulated by design.
 - Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
@@ -221,6 +222,86 @@ sessions, remains out of scope here.
 
 Deferred: real backend-integrated viewport export, glassmorphism visual
 pass.
+
+### M-008 — Map Section redesign, Milestone 5: real PDF/PNG map export (this session)
+
+Made two of the map's six export formats genuinely real, no backend
+changes needed:
+
+- **PNG**: was a fixed 640×480 canvas with drawn text, not a map
+  screenshot. Now captures the actual live map canvas
+  (`document.querySelector('[data-map-viewport] canvas')`, a stable
+  attribute added to both `emission-map.tsx` and `maplibre-map.tsx`'s
+  wrapper divs) via `canvas.toBlob()`. Both engines now set
+  `preserveDrawingBuffer: true` on their WebGL context (Cesium:
+  `contextOptions.webgl`; MapLibre: `canvasContextAttributes` — the
+  top-level `preserveDrawingBuffer` option was removed/moved in this
+  MapLibre version) since WebGL clears its drawing buffer after each frame
+  otherwise, which would make the capture blank.
+- **PDF**: was a hardcoded placeholder blob. Now calls the real,
+  already-working `POST /reports` (`backend/app/services/reports.py`,
+  reportlab-based) and downloads the returned file. Added a minimal local
+  `CreatedReport` type in `use-map-export.ts` matching the backend's
+  actual schema — `frontend/src/types/report.ts`'s existing `ReportOut` is
+  a much larger, mismatched shape (`dataset_name`, `confidence_score`,
+  `hotspots`, etc.) that the real endpoint never returns; reusing it would
+  have been misleading. `export-menu.tsx` no longer shows "Simulated" on
+  PDF. `use-map-export.ts`'s `triggerExport` now handles png/pdf as real
+  async operations and records a "Failed" history entry (styled red, was
+  previously always green) if either fails, instead of only ever
+  succeeding.
+- GeoJSON/CSV/JSON were already real (built from the working `/map/plants`
+  and `/map/hotspots` data) — unchanged. GeoTIFF is unchanged, still
+  simulated, per the user's explicit decision (no suitable raster data
+  source or dependency for real viewport-clipped rasterization).
+
+**Correction to an earlier claim in this same session**: `/map/plants` and
+`/map/hotspots` were briefly believed to be missing backend routes. They
+are not — both exist in `backend/app/api/v1/analytics.py`
+(`AnalyticsService.plants()`/`.hotspots()`), fully implemented and
+user-scoped. The mistake came from grepping for a `map.py` filename that
+doesn't exist; the routes are simply defined inside `analytics.py`. No
+prerequisite backend work was actually needed.
+
+**A real, pre-existing issue surfaced during manual verification, out of
+scope to fix here**: `frontend/src/services/api-client.ts` has an
+app-wide mock-data fallback (`getMockData`) that silently serves fake
+data whenever a real request fails (network error or non-2xx status) for
+several known paths, including `POST /reports`. In this session's sandbox
+(no Python/GDAL toolchain available to run the real backend — see below),
+the real `POST /reports` call returned 500, and the mock fallback
+transparently substituted a fake report object whose hardcoded `url` is
+`"/profile_pic.jpg"` — so the "successful" PDF export in this environment
+actually downloaded a JPEG mislabeled `.pdf`. The map-export code itself
+is correct and did make the real network call (confirmed via captured
+network request: `POST /api/v1/reports → 500`); the masking happens one
+layer up, in the shared API client, and affects every feature that hits a
+mocked path, not just this one. Worth a dedicated look in a future
+session — silently serving unrelated mock data on a 500 makes real
+backend failures very hard to notice anywhere in the app.
+
+**Also discovered, not acted on**: `backend/requirements.txt` already
+lists `rasterio==1.4.3` (used by `backend/app/services/imaging.py` and
+the ML service), contradicting this session's earlier assumption that
+real GeoTIFF export would need "a new geospatial dependency." It's an
+existing dependency — just not installable in this particular sandbox
+(missing system `gdal-config`). This doesn't change the decision to skip
+real GeoTIFF this milestone, but it means a future GeoTIFF milestone would
+extend existing tooling rather than adding something new.
+
+Verification: frontend typecheck/lint/test/build all clean (83/83 tests,
+no new lint debt, no test changes needed for this milestone). Backend
+`pytest` could not be run in this sandbox (no Python environment, and
+`pip install -r requirements-dev.txt` fails locally on the missing GDAL
+system library that `rasterio` needs to build) — no backend files were
+changed, so this is a low-risk gap, not a regression risk. Manually
+verified via a live frontend dev server + browser automation: PNG export
+downloads a real screenshot in both 2D (1864×1340 RGBA, confirmed via
+`file`) and 3D modes (both recorded "Successful"); PDF export's real
+network call was confirmed via captured network request, but its
+apparent "success" in this sandbox is the mock-fallback artifact
+described above, not a genuine verified success — real success/failure
+against an actual running backend was not verified end-to-end.
 
 Reference:
 

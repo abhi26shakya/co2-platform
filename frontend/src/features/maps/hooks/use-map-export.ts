@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api, ApiError } from "@/services/api-client";
 
 export type ExportFormat = "png" | "geojson" | "csv" | "json" | "tiff" | "pdf";
 
@@ -9,6 +10,21 @@ export interface ExportHistoryEntry {
   format: string;
   time: string;
   status: string;
+}
+
+/**
+ * Matches the REAL backend response shape (backend/app/schemas/report.py), not the much larger
+ * `ReportOut` in `types/report.ts` — that type was written against a different, unused mock shape
+ * (dataset_name, confidence_score, hotspots, etc.) that the actual `/reports` endpoint never
+ * returns. Only `url` is needed here.
+ */
+interface CreatedReport {
+  id: string;
+  title: string;
+  format: string;
+  params: Record<string, unknown>;
+  created_at: string;
+  url: string | null;
 }
 
 export interface MapExportData {
@@ -82,40 +98,58 @@ function buildExportBlob(format: ExportFormat, data: MapExportData): { blob: Blo
     };
   }
 
-  if (format === "pdf") {
-    return {
-      blob: new Blob(["%PDF-1.4\n% Simulated Emissia Spatial Report PDF Document export placeholder content."], {
-        type: "application/pdf",
-      }),
-      filename: "emissia_report_placeholder.pdf",
-    };
-  }
-
-  // png handled separately (canvas.toBlob is async) — see exportPng below
+  // pdf/png are handled separately below — pdf is a real async network call, png is a real
+  // (also effectively async) capture of the live map canvas.
   return { blob: null, filename };
 }
 
-function exportPng(data: MapExportData) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 640;
-  canvas.height = 480;
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.fillStyle = "#09090b";
-    ctx.fillRect(0, 0, 640, 480);
-    ctx.fillStyle = "#10b981";
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillText("EMISSIA 3D EARTH VIEWPORT RENDER", 50, 80);
-    ctx.fillStyle = "#a1a1aa";
-    ctx.font = "14px monospace";
-    ctx.fillText(`Timestamp: ${new Date().toLocaleString()}`, 50, 130);
-    ctx.fillText(`Active Basemap: ${data.activeBasemap.toUpperCase()}`, 50, 160);
-    ctx.fillText(`Active Gases: ${data.activeGasKeys.join(", ").toUpperCase()}`, 50, 190);
-    ctx.fillText(`Inspected: ${data.inspectedFacilityName ?? "None"}`, 50, 220);
-  }
-  canvas.toBlob((blob) => {
-    if (blob) downloadBlob(blob, "emissia_viewport.png");
+/** Finds the currently-mounted map engine's canvas (Cesium or MapLibre — whichever has the
+ *  `data-map-viewport` wrapper mounted) so PNG export captures a real screenshot rather than a
+ *  fabricated placeholder. Requires `preserveDrawingBuffer: true` on both engines' WebGL context,
+ *  otherwise the browser clears the buffer after each frame and this reads back blank. */
+function findMapCanvas(): HTMLCanvasElement | null {
+  return document.querySelector<HTMLCanvasElement>("[data-map-viewport] canvas");
+}
+
+function exportPng(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  return new Promise((resolve) => {
+    const canvas = findMapCanvas();
+    if (!canvas) {
+      resolve({ ok: false, reason: "Map canvas not ready — try again once the map has finished loading." });
+      return;
+    }
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        resolve({ ok: false, reason: "Could not capture the map viewport." });
+        return;
+      }
+      downloadBlob(blob, "emissia_viewport.png");
+      resolve({ ok: true });
+    });
   });
+}
+
+/** Calls the real backend report generator (backend/app/services/reports.py) instead of
+ *  fabricating a placeholder PDF. Downloads via the returned storage URL, which the Next.js
+ *  rewrite proxies straight to the backend's (dev-mode, unauthenticated) file-serving route. */
+async function exportPdf(): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const report = await api.post<CreatedReport>("/reports", { format: "pdf" });
+    if (!report.url) {
+      return { ok: false, reason: "Report generated but no download URL was returned." };
+    }
+    const link = document.createElement("a");
+    link.href = report.url;
+    link.download = `${report.title.replace(/[^a-z0-9]+/gi, "_")}.pdf`;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return { ok: true };
+  } catch (err) {
+    const reason = err instanceof ApiError ? err.message : "Report generation failed — is the backend running?";
+    return { ok: false, reason };
+  }
 }
 
 /**
@@ -138,29 +172,36 @@ export function useMapExport(getExportData: () => MapExportData) {
       activeFormatRef.current = format;
       setActiveFormat(format);
 
+      const recordHistory = (status: "Successful" | "Failed") => {
+        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        setHistory((prev) => [
+          { id: Math.random().toString(36).substring(2, 9), format: format.toUpperCase(), time, status },
+          ...prev,
+        ]);
+        activeFormatRef.current = null;
+        setActiveFormat(null);
+        setProgress(0);
+      };
+
       let localProgress = 0;
       const interval = setInterval(() => {
         localProgress += 20;
         setProgress(localProgress);
         if (localProgress >= 100) {
           clearInterval(interval);
-          const data = getExportDataRef.current();
 
+          // png/pdf are real async operations (canvas capture, network call); the rest stay
+          // synchronous, built from already-fetched map state.
           if (format === "png") {
-            exportPng(data);
+            void exportPng().then((result) => recordHistory(result.ok ? "Successful" : "Failed"));
+          } else if (format === "pdf") {
+            void exportPdf().then((result) => recordHistory(result.ok ? "Successful" : "Failed"));
           } else {
+            const data = getExportDataRef.current();
             const { blob, filename } = buildExportBlob(format, data);
             if (blob) downloadBlob(blob, filename);
+            recordHistory("Successful");
           }
-
-          const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-          setHistory((prev) => [
-            { id: Math.random().toString(36).substring(2, 9), format: format.toUpperCase(), time, status: "Successful" },
-            ...prev,
-          ]);
-          activeFormatRef.current = null;
-          setActiveFormat(null);
-          setProgress(0);
         }
       }, 150);
     },
