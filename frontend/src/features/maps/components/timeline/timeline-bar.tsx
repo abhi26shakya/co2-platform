@@ -37,7 +37,7 @@ export function TimelineBar({
   onSpeedChange,
 }: Props) {
   return (
-    <Card className="p-3 bg-ground-900/40 border-ground-700/80 space-y-2.5">
+    <Card className="glass p-3 space-y-2.5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-ground-750 pb-2">
         <div className="flex items-center gap-2">
           <Calendar className="h-3.5 w-3.5 text-sensor" />

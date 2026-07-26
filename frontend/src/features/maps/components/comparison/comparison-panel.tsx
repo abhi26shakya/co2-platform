@@ -40,7 +40,7 @@ export function ComparisonPanel({
   onPredictionBChange,
 }: Props) {
   return (
-    <Card className="p-4 bg-ground-900/80 border-ground-700 space-y-3.5 text-xs animate-in slide-in-from-top duration-250">
+    <Card className="glass p-4 space-y-3.5 text-xs animate-in slide-in-from-top duration-250">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-ground-800 pb-2">
         <div className="space-y-0.5">
           <span className="text-[10px] uppercase font-bold tracking-wider text-sensor">Prediction Analysis Engine</span>

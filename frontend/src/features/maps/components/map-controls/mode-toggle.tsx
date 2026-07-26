@@ -8,7 +8,7 @@ interface Props {
 /** Segmented 2D/3D engine switch, floating on the map canvas above the compass. */
 export function ModeToggle({ mode, onChange }: Props) {
   return (
-    <div className="absolute top-20 left-4 z-10 flex bg-ground-900/90 border border-ground-700/80 rounded-lg p-1 gap-0.5 shadow-2xl select-none">
+    <div className="glass-strong absolute top-20 left-4 z-10 flex rounded-lg p-1 gap-0.5 select-none">
       {(["2d", "3d"] as const).map((id) => (
         <button
           key={id}

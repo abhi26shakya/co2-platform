@@ -12,7 +12,7 @@ interface Props {
 /** Presentational camera-control button stack — Cesium viewer handlers live in the map canvas engine. */
 export function CameraControls({ onZoomIn, onZoomOut, onTiltUp, onTiltDown, onReset, onToggleFullscreen }: Props) {
   return (
-    <div className="absolute bottom-4 right-20 bg-ground-900/90 border border-ground-700/80 rounded-xl p-1.5 flex flex-col gap-1 z-10 shadow-2xl">
+    <div className="glass-strong absolute bottom-4 right-20 rounded-xl p-1.5 flex flex-col gap-1 z-10">
       <button onClick={onZoomIn} className="h-7.5 w-7.5 rounded hover:bg-ground-800 flex items-center justify-center text-instrument cursor-pointer" title="Zoom In">
         <ZoomIn className="h-4 w-4" />
       </button>

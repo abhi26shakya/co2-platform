@@ -26,7 +26,7 @@ export function ShareDialog({ open, link, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-ground-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <Card className="w-full max-w-sm p-6 bg-ground-900 border-ground-700 space-y-4">
+      <Card className="glass-strong w-full max-w-sm p-6 space-y-4">
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-instrument">Generated Shareable Link</h3>
           <p className="text-xs text-ground-400">Includes active basemaps, layers, camera settings, and gas selections.</p>
