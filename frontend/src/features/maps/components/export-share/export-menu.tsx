@@ -2,13 +2,13 @@ import { Card } from "@/components/ui/card";
 import { Download } from "lucide-react";
 import type { ExportFormat, ExportHistoryEntry } from "@/features/maps/hooks/use-map-export";
 
-const FORMATS: { format: ExportFormat; label: string }[] = [
+const FORMATS: { format: ExportFormat; label: string; simulated?: boolean }[] = [
   { format: "png", label: "PNG Viewport" },
   { format: "geojson", label: "GeoJSON Spatial" },
   { format: "csv", label: "CSV Table" },
   { format: "json", label: "JSON Metadata" },
-  { format: "tiff", label: "GeoTIFF (Raster)" },
-  { format: "pdf", label: "PDF Report" },
+  { format: "tiff", label: "GeoTIFF (Raster)", simulated: true },
+  { format: "pdf", label: "PDF Report", simulated: true },
 ];
 
 interface Props {
@@ -39,6 +39,14 @@ export function ExportMenu({ activeFormat, progress, history, onExport }: Props)
                   <span className="flex items-center gap-2">
                     <Download className={`h-3 w-3 text-sensor ${isExporting ? "animate-bounce" : ""}`} />
                     {exp.label}
+                    {exp.simulated && (
+                      <span
+                        className="px-1 py-0.5 rounded bg-ground-700/60 text-[8px] font-bold uppercase tracking-wider text-ground-400"
+                        title="Placeholder content — not generated from real map data"
+                      >
+                        Simulated
+                      </span>
+                    )}
                   </span>
                   {isExporting && <span className="text-[8px] font-mono text-sensor animate-pulse">{progress}%</span>}
                 </button>

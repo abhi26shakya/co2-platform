@@ -8,9 +8,11 @@ import {
   circleAreaM2,
   formatAreaKm2,
   formatDistanceKm,
+  hasMinimumPoints,
   haversineDistanceM,
   m2ToKm2,
   metersToKm,
+  pointsRemaining,
   polygonAreaM2,
   rectangleAreaM2,
   rectangleBounds,
@@ -97,6 +99,39 @@ describe("haversineDistanceM", () => {
   it("matches the known ~111.19 km per degree of latitude at the equator", () => {
     const distance = haversineDistanceM({ lat: 0, lon: 0 }, { lat: 1, lon: 0 });
     expect(distance / 1000).toBeCloseTo(111.19, 0);
+  });
+});
+
+describe("hasMinimumPoints", () => {
+  it("requires 3 points for polygon and area", () => {
+    expect(hasMinimumPoints("polygon", 2)).toBe(false);
+    expect(hasMinimumPoints("polygon", 3)).toBe(true);
+    expect(hasMinimumPoints("area", 2)).toBe(false);
+    expect(hasMinimumPoints("area", 3)).toBe(true);
+  });
+
+  it("requires only 2 points for polyline and distance", () => {
+    expect(hasMinimumPoints("polyline", 1)).toBe(false);
+    expect(hasMinimumPoints("polyline", 2)).toBe(true);
+    expect(hasMinimumPoints("distance", 2)).toBe(true);
+  });
+
+  it("treats unlisted tools (picker/rectangle/circle) as always supported", () => {
+    expect(hasMinimumPoints("picker", 0)).toBe(true);
+    expect(hasMinimumPoints("rectangle", 1)).toBe(true);
+  });
+});
+
+describe("pointsRemaining", () => {
+  it("reports how many more points a polygon needs", () => {
+    expect(pointsRemaining("polygon", 1)).toBe(2);
+    expect(pointsRemaining("polygon", 2)).toBe(1);
+    expect(pointsRemaining("polygon", 3)).toBe(0);
+    expect(pointsRemaining("polygon", 5)).toBe(0);
+  });
+
+  it("is zero for tools with no minimum", () => {
+    expect(pointsRemaining("picker", 0)).toBe(0);
   });
 });
 

@@ -45,8 +45,11 @@ Date: 2026-07-26
 
 # Current Focus
 
-- Map Section redesign, Milestone 2 (MapLibre GL 2D mode + 2D/3D toggle)
-  complete — see M-005. Next up: Milestone 3 (GIS tools/export hardening).
+- Map Section redesign, Milestone 3 (GIS tools/export hardening) complete
+  — see M-006. Real backend-integrated export was explicitly deferred: the
+  backend's `/reports` endpoint is an account-wide summary feature with no
+  viewport/gas/basemap parameters, a separate concern from the map's
+  client-side export panel.
 - Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
@@ -134,6 +137,51 @@ existing 3D mode still works with no regression — no new console errors.
 
 Deferred to later milestones: backend-integrated export/share, a
 glassmorphism visual pass, and further GIS-tool hardening.
+
+### M-006 — Map Section redesign, Milestone 3: GIS tools/export hardening (this session)
+
+Frontend-only hardening pass, scoped down from the original "real
+backend-integrated export" plan after finding the backend's `/reports`
+endpoint has no viewport/gas/basemap parameters — it generates an
+account-wide emission summary, a different feature from the map's
+client-side export panel. Building a viewport-scoped backend export
+endpoint was deferred as its own (larger, cross-cutting) piece of work.
+
+Fixed four concrete gaps found during review:
+
+- **Degenerate polygons**: both engines let a "polygon"/"area" drawing
+  complete via double-click with only 2 points, producing an invalid
+  GeoJSON Polygon. Added `hasMinimumPoints`/`pointsRemaining` to
+  `geo-math.ts` (polygon/area need ≥3 points, polyline/distance need ≥2);
+  both engines now show a live hint ("Add at least N more point(s)...")
+  instead of silently completing a broken shape.
+- **Share link ignored the real camera**: `triggerMapShare` hardcoded
+  `lat=22.50&lon=79.50&zoom=9` regardless of where the user had actually
+  panned/zoomed, and omitted `mapMode`. Extracted a pure
+  `features/maps/lib/share-link.ts#buildShareLink` that reads the actual
+  `map-store` camera plus `mapMode`, `basemap`, and active gases.
+- **QR code auto-fired a third-party request**: `share-dialog.tsx` loaded
+  an `api.qrserver.com` image embedding the full share link the instant
+  the dialog opened, with no user action. Now gated behind an explicit
+  "Generate QR Code" button, with a disclosure line once generated.
+- **Simulated export formats looked real**: `use-map-export.ts`'s
+  `tiff`/`pdf` formats produce hardcoded placeholder content, unlike the
+  other four formats which reflect real map state. `export-menu.tsx` now
+  shows a "Simulated" badge on those two buttons only.
+
+9 new tests added (`hasMinimumPoints`/`pointsRemaining`, `buildShareLink`),
+83/83 passing; typecheck/lint/build clean (no new lint debt — one
+`useEffect`-based state reset was rewritten as an in-render state
+adjustment to avoid introducing a new `react-hooks/set-state-in-effect`
+warning). Manually verified in-browser: polygon/area correctly refuses to
+complete with 2 points and completes normally with 3+; share dialog
+reflects actual camera position and `mode`; QR image only loads after the
+explicit click; export menu shows "Simulated" only on GeoTIFF/PDF;
+re-verified 2D/3D toggle still works with no regression — no new console
+errors.
+
+Deferred: real backend-integrated viewport export, glassmorphism visual
+pass.
 
 Reference:
 
