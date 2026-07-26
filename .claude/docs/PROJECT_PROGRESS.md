@@ -45,9 +45,8 @@ Date: 2026-07-26
 
 # Current Focus
 
-- Closing the frontend test-coverage gap identified by `/next`: the map
-  feature (zustand store + prediction/geo hooks) had zero tests despite
-  being the most actively-changed, most complex part of the codebase.
+- Map Section redesign, Milestone 1 (layout/UX restructure) complete — see
+  M-004. Next up: Milestone 2 (MapLibre GL 2D mode + 2D/3D toggle).
 - Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
@@ -74,6 +73,31 @@ Vitest + React Testing Library added. Initial coverage: `map-store`
 (`usePlants`/`useHotspots`/`useAnalytics`), `usePredict`,
 `useRunPrediction` (incl. query-invalidation behavior). 23 tests, all
 passing. CI's `frontend` job now runs `npm run test`.
+
+### M-004 — Map Section redesign, Milestone 1: layout/UX restructure (this session)
+
+Resolved the `emission-map.tsx` monolithic-component tech debt (see
+`KNOWN_ISSUES.md`). `maps/page.tsx` (was 1242 lines) and `emission-map.tsx`
+(was 1045 lines) decomposed into `features/maps/components/{map-canvas,
+map-controls,layer-panel,search,gis-tools,timeline,comparison,
+facility-inspector,alerts,export-share}/`, new hooks (`use-drawing.ts`,
+`use-map-export.ts`), a `map-ui-store.ts` for left-rail/drawer UI state, and
+pure GIS geometry helpers (`gis-tools/lib/geo-math.ts`, unit-tested).
+Layout changed from a permanent 6-card left rail + bottom detail grid to a
+collapsible icon rail (one flyout panel at a time), a full-bleed map
+canvas, a slim timeline bar, and an on-demand facility-inspector drawer.
+Mock plant enrichment (fabricated sector/company/gas data — no such fields
+exist on the backend `PlantOut` schema yet) isolated into
+`features/maps/lib/enrich-plants.ts` with a placeholder comment rather than
+left inline. All `alert()` calls replaced with inline status text. 35 new
+tests added (geo-math, map-ui-store, use-drawing, use-map-export), all
+passing; typecheck/lint/build clean; manually verified in-browser (panel
+toggling, search, GIS drawing tools, timeline, facility drawer, export,
+share dialog — no new console errors).
+
+Deferred to later milestones: a 2D MapLibre GL mode toggleable against the
+existing Cesium 3D globe, backend-integrated export/share (currently
+client-only simulation), and a glassmorphism visual pass.
 
 Reference:
 

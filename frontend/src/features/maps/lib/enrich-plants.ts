@@ -1,0 +1,78 @@
+import type { PlantOut } from "@/types/geo";
+
+export interface HistoricalPoint {
+  month: string;
+  value: number;
+}
+
+export interface EnrichedPlant extends PlantOut {
+  sector: string;
+  company: string;
+  predicted_gases: string[];
+  confidence: string;
+  trend: string;
+  historical: HistoricalPoint[];
+  latest_prediction: string;
+}
+
+const SECTORS = ["Power Combustion", "Petrochemical Refinery", "Cement Manufacturing", "Steel Processing"];
+const COMPANIES = ["National Thermal Power Corp", "State Oil Refinery", "Universal Cement Ltd", "Global Steel Works"];
+const GAS_SCENARIOS = [
+  ["CO₂", "NO₂", "CO"],
+  ["CO₂", "CH₄"],
+  ["CO₂", "SO₂"],
+  ["CO₂", "NO₂", "SO₂", "CO"],
+];
+const TRENDS = ["+2.4% (increasing)", "-1.5% (decreasing)", "+0.8% (stable)", "-4.2% (falling)"];
+
+/**
+ * Placeholder enrichment: fabricates sector/company/gas/trend fields the backend does not
+ * currently expose (see backend/app/schemas/geo.py PlantOut). Swap this module out for real
+ * backend fields once available — nothing downstream depends on it being mock data specifically.
+ */
+export function enrichPlants(plants: PlantOut[]): EnrichedPlant[] {
+  return plants.map((p, idx) => {
+    const sector = SECTORS[idx % SECTORS.length];
+    const company = p.name.includes("Taichung")
+      ? "Taipower"
+      : p.name.includes("Belchatow")
+        ? "PGE Group"
+        : COMPANIES[idx % COMPANIES.length];
+    const predicted_gases = p.name.includes("Mundra") ? ["CO₂", "CH₄"] : GAS_SCENARIOS[idx % GAS_SCENARIOS.length];
+    const confidence = `${88 + (idx % 11)}%`;
+    const trend = TRENDS[idx % TRENDS.length];
+
+    const baseEmissions = p.co2_enhancement_ppm || 45 + idx * 5;
+    const historical: HistoricalPoint[] = [
+      { month: "Nov 25", value: baseEmissions * 0.95 },
+      { month: "Dec 25", value: baseEmissions * 0.98 },
+      { month: "Jan 26", value: baseEmissions * 1.02 },
+      { month: "Feb 26", value: baseEmissions * 1.0 },
+      { month: "Mar 26", value: baseEmissions },
+    ];
+
+    return {
+      ...p,
+      sector,
+      company,
+      predicted_gases,
+      confidence,
+      trend,
+      historical,
+      latest_prediction: `${baseEmissions.toFixed(2)} ppm`,
+    };
+  });
+}
+
+/** Rescales a plant's historical series to the currently selected timeline tick set, matching enrichPlants' trend shape. */
+export function buildFacilityHistoricalSeries(baseCo2: number, ticks: string[]): HistoricalPoint[] {
+  return ticks.map((tick, i) => ({
+    month: tick,
+    value: baseCo2 * (0.85 + 0.15 * Math.sin(i * 1.5) + 0.05 * Math.cos(i * 3)),
+  }));
+}
+
+/** Time-scales hotspot intensity/emissions to simulate historical variation at a given timeline index. */
+export function timeScaleFactor(sliderIndex: number): number {
+  return 0.85 + 0.15 * Math.sin(sliderIndex * 1.5) + 0.05 * Math.cos(sliderIndex * 3);
+}
