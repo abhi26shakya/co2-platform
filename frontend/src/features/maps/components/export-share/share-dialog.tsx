@@ -11,6 +11,16 @@ interface Props {
 
 export function ShareDialog({ open, link, onClose }: Props) {
   const [copied, setCopied] = useState(false);
+  const [qrRequested, setQrRequested] = useState(false);
+  const [qrLink, setQrLink] = useState(link);
+
+  // A new share link means a new session — require the user to opt in to generating a QR code
+  // for it again, rather than carrying the previous opt-in forward. Adjusting state during
+  // render (rather than in a useEffect) avoids an extra post-render commit for this reset.
+  if (link !== qrLink) {
+    setQrLink(link);
+    setQrRequested(false);
+  }
 
   if (!open) return null;
 
@@ -28,11 +38,26 @@ export function ShareDialog({ open, link, onClose }: Props) {
 
         <div className="flex flex-col items-center justify-center space-y-2 p-3.5 bg-ground-950 rounded-lg border border-ground-800">
           <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Scan to Open Map</span>
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=10b981&bgcolor=09090b&data=${encodeURIComponent(link)}`}
-            alt="Emissia Map QR Code"
-            className="h-28 w-28 rounded border border-ground-800 p-1 bg-ground-950"
-          />
+          {qrRequested ? (
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=10b981&bgcolor=09090b&data=${encodeURIComponent(link)}`}
+              alt="Emissia Map QR Code"
+              className="h-28 w-28 rounded border border-ground-800 p-1 bg-ground-950"
+            />
+          ) : (
+            <button
+              onClick={() => setQrRequested(true)}
+              className="h-28 w-28 rounded border border-dashed border-ground-750 text-[10px] text-ground-400 hover:text-instrument hover:border-ground-500 cursor-pointer flex flex-col items-center justify-center gap-1 transition-colors"
+            >
+              <span>Generate</span>
+              <span>QR Code</span>
+            </button>
+          )}
+          {qrRequested && (
+            <p className="text-[9px] text-ground-500 leading-snug text-center">
+              This link was sent to a third-party QR image service to render.
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end items-center gap-2 pt-2">

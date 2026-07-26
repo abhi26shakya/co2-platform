@@ -13,6 +13,8 @@ import {
   buildPolygonResult,
   buildPolylineResult,
   buildRectangleResult,
+  hasMinimumPoints,
+  pointsRemaining,
   type CompletedDrawing,
 } from "@/features/maps/components/gis-tools/lib/geo-math";
 import type { DrawingMode } from "@/features/maps/hooks/use-drawing";
@@ -596,7 +598,11 @@ export default function EmissionMap({
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
     drawHandler.setInputAction(() => {
-      if (activePoints.length < 2) return;
+      if (!hasMinimumPoints(drawingMode, activePoints.length)) {
+        const remaining = pointsRemaining(drawingMode, activePoints.length);
+        onLiveMeasurement(`Add at least ${remaining} more point${remaining === 1 ? "" : "s"} to complete this ${drawingMode}.`);
+        return;
+      }
 
       const uuid = Math.random().toString(36).substring(2, 9);
       const coordsList = activePoints.map(toLatLon);

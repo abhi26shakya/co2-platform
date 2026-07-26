@@ -13,6 +13,7 @@ import { enrichPlants, buildFacilityHistoricalSeries, timeScaleFactor } from "@/
 import { buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
 import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/lib/visualization-mode-catalog";
 import { DEFAULT_2D_BASEMAP, isBasemapSupported } from "@/features/maps/lib/basemap-catalog";
+import { buildShareLink } from "@/features/maps/lib/share-link";
 
 import { BasemapSelector } from "@/features/maps/components/layer-panel/basemap-selector";
 import { GasLayerControls } from "@/features/maps/components/layer-panel/gas-layer-controls";
@@ -79,7 +80,7 @@ export default function MapPage() {
   const { data: hotspots = [] } = useHotspots();
   const enrichedPlants = enrichPlants(plants);
 
-  const { activeBasemap, setActiveBasemap, mapMode, setMapMode, selectedFacility, setSelectedFacility, gases, toggleGas, setGasOpacity } =
+  const { camera, activeBasemap, setActiveBasemap, mapMode, setMapMode, selectedFacility, setSelectedFacility, gases, toggleGas, setGasOpacity } =
     useMapStore();
   const { activePanel, togglePanel, inspectorDrawerOpen, openInspectorDrawer, closeInspectorDrawer, alertsOpen, setAlertsOpen } =
     useMapUiStore();
@@ -170,11 +171,10 @@ export default function MapPage() {
   };
 
   const triggerMapShare = () => {
-    const activeGasKeys = Object.keys(gases)
-      .filter((k) => gases[k].enabled)
-      .join(",");
-    const cameraParams = `lat=22.50&lon=79.50&zoom=9&basemap=${effectiveBasemap}&gases=${activeGasKeys}`;
-    setShareConfigLink(`https://co2-platform-nine.vercel.app/map?${cameraParams}`);
+    const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
+    setShareConfigLink(
+      buildShareLink({ camera, mapMode, basemap: effectiveBasemap, activeGasKeys })
+    );
     setShareLinkOpen(true);
   };
 

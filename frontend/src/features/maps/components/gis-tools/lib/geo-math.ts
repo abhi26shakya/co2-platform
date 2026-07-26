@@ -105,6 +105,30 @@ export interface CompletedDrawing {
   geojson: GeoFeature;
 }
 
+/** Minimum vertex count each multi-click tool needs before it can be completed —
+ *  polygon/area need a closed ring (3 unique vertices), polyline/distance just need 2. */
+const MINIMUM_POINTS: Record<string, number> = {
+  polygon: 3,
+  area: 3,
+  polyline: 2,
+  distance: 2,
+};
+
+/** Whether a multi-click drawing tool has enough vertices to complete. Tools not present in
+ *  MINIMUM_POINTS (picker/rectangle/circle) use their own click-driven completion flow, not this
+ *  double-click-to-finish path, so they always report supported here. */
+export function hasMinimumPoints(type: string, count: number): boolean {
+  const min = MINIMUM_POINTS[type];
+  if (min == null) return true;
+  return count >= min;
+}
+
+export function pointsRemaining(type: string, count: number): number {
+  const min = MINIMUM_POINTS[type];
+  if (min == null) return 0;
+  return Math.max(0, min - count);
+}
+
 export function buildPickerResult(coords: LatLon, uuid: string): CompletedDrawing {
   const measurement = `Coords: ${coords.lat.toFixed(4)}°, ${coords.lon.toFixed(4)}°`;
   return {
