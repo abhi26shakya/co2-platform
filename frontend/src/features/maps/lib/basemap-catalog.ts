@@ -3,7 +3,6 @@ import type { MapMode } from "@/features/maps/store/map-store";
 export interface BasemapDef {
   id: string;
   label: string;
-  /** Which engines this basemap is available in — "terrain" is a Cesium-only elevation provider. */
   modes: MapMode[];
 }
 
@@ -11,7 +10,6 @@ export const BASEMAPS: BasemapDef[] = [
   { id: "dark", label: "Dark style", modes: ["2d", "3d"] },
   { id: "satellite", label: "Satellite", modes: ["2d", "3d"] },
   { id: "hybrid", label: "Hybrid", modes: ["2d", "3d"] },
-  { id: "terrain", label: "Terrain 3D", modes: ["3d"] },
   { id: "osm", label: "Street Map", modes: ["2d", "3d"] },
 ];
 

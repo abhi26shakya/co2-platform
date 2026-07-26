@@ -63,8 +63,8 @@ describe("setActiveBasemap", () => {
   });
 
   it("persists the basemap choice to localStorage", () => {
-    useMapStore.getState().setActiveBasemap("terrain");
-    expect(localStorage.getItem("emissia-active-basemap")).toBe("terrain");
+    useMapStore.getState().setActiveBasemap("hybrid");
+    expect(localStorage.getItem("emissia-active-basemap")).toBe("hybrid");
   });
 });
 

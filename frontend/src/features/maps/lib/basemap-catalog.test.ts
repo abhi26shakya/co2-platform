@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import { basemapsForMode, isBasemapSupported, BASEMAPS, DEFAULT_2D_BASEMAP } from "./basemap-catalog";
 
 describe("basemapsForMode", () => {
-  it("excludes Terrain 3D in 2d mode", () => {
+  it("includes every basemap in 2d mode", () => {
     const ids = basemapsForMode("2d").map((b) => b.id);
-    expect(ids).not.toContain("terrain");
     expect(ids).toEqual(["dark", "satellite", "hybrid", "osm"]);
   });
 
@@ -14,12 +13,9 @@ describe("basemapsForMode", () => {
 });
 
 describe("isBasemapSupported", () => {
-  it("rejects terrain in 2d mode", () => {
-    expect(isBasemapSupported("terrain", "2d")).toBe(false);
-  });
-
-  it("accepts terrain in 3d mode", () => {
-    expect(isBasemapSupported("terrain", "3d")).toBe(true);
+  it("rejects an unknown basemap id", () => {
+    expect(isBasemapSupported("nonexistent", "2d")).toBe(false);
+    expect(isBasemapSupported("nonexistent", "3d")).toBe(false);
   });
 
   it("accepts a shared basemap in either mode", () => {

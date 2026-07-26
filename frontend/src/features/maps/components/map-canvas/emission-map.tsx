@@ -211,12 +211,7 @@ export default function EmissionMap({
     }
 
     viewer.imageryLayers.addImageryProvider(provider);
-
-    if (activeBasemap === "terrain") {
-      viewer.terrainProvider = Cesium.createWorldTerrain();
-    } else {
-      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-    }
+    viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
 
     // The base swap above calls removeAll(), which would silently drop the boundaries/roads
     // overlays too — re-add them on top of the fresh base layer if their toggles are on.

@@ -92,8 +92,8 @@ export default function MapPage() {
   const effectiveVisualizationMode = isModeSupported(visualizationMode, mapMode)
     ? visualizationMode
     : DEFAULT_2D_VISUALIZATION_MODE;
-  // Same non-mutating fallback for basemaps with no 2D equivalent (e.g. "Terrain 3D") — the
-  // selector and both map engines all read this instead of the raw stored value.
+  // Same non-mutating fallback for basemaps with no 2D equivalent — the selector and both map
+  // engines all read this instead of the raw stored value.
   const effectiveBasemap = isBasemapSupported(activeBasemap, mapMode) ? activeBasemap : DEFAULT_2D_BASEMAP;
   const [showLayers, setShowLayers] = useState<ShowLayers>(DEFAULT_SHOW_LAYERS);
 
