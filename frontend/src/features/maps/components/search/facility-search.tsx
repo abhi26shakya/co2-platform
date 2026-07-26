@@ -10,10 +10,14 @@ interface Props {
   onQueryChange: (query: string) => void;
   results: MapSearchResult[];
   onSelect: (result: MapSearchResult) => void;
+  /** Full plant roster shown as a browsable dropdown/list when the query is empty. */
+  allFacilities?: MapSearchResult[];
 }
 
-export function FacilitySearch({ query, onQueryChange, results, onSelect }: Props) {
+export function FacilitySearch({ query, onQueryChange, results, onSelect, allFacilities = [] }: Props) {
   const [focused, setFocused] = useState(false);
+  const isBrowsing = query.trim().length === 0;
+  const visible = isBrowsing ? allFacilities : results;
 
   return (
     <div className="relative">
@@ -34,9 +38,14 @@ export function FacilitySearch({ query, onQueryChange, results, onSelect }: Prop
         </div>
       </Card>
 
-      {focused && results.length > 0 && (
-        <div className="glass-strong absolute top-full left-0 right-0 mt-1 rounded-lg z-20 overflow-hidden divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">
-          {results.map((result) => (
+      {focused && visible.length > 0 && (
+        <div className="glass-strong absolute top-full left-0 right-0 mt-1 rounded-lg z-20 max-h-72 overflow-y-auto divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">
+          {isBrowsing && (
+            <div className="px-3 py-1.5 text-[9px] uppercase tracking-wider text-ground-500 sticky top-0 bg-ground-900/95">
+              All Facilities · {allFacilities.length}
+            </div>
+          )}
+          {visible.map((result) => (
             <button
               key={result.id}
               onMouseDown={() => {

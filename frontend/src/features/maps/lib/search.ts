@@ -14,6 +14,21 @@ export interface MapSearchResult {
 
 const MAX_RESULTS = 5;
 
+/** Full plant roster for the browse-by-list / dropdown affordance in FacilitySearch, shown when
+ *  the query is empty instead of the empty filtered-results state. */
+export function buildFacilityList(plants: EnrichedPlant[]): MapSearchResult[] {
+  return plants.map((p) => ({
+    type: "plant" as const,
+    id: p.id,
+    name: p.name,
+    country: p.country,
+    details: `${p.sector} · ${p.company}`,
+    lat: p.lat,
+    lon: p.lon,
+    raw: p,
+  }));
+}
+
 export function buildSearchResults(
   plants: EnrichedPlant[],
   hotspots: MapHotspot[],

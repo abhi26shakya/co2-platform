@@ -65,7 +65,7 @@ interface Props {
 /** Collapsed floating badge by default; expands into a compact list — replaces the always-open left-rail alerts card. */
 export function AlertsBadge({ open, onToggle, onSelectAlert }: Props) {
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+    <div className="absolute top-16 right-4 z-10">
       <button
         onClick={onToggle}
         className="flex items-center gap-2 bg-ground-950/95 border border-red-500/30 rounded-full px-3 py-1.5 shadow-2xl cursor-pointer"
@@ -77,7 +77,7 @@ export function AlertsBadge({ open, onToggle, onSelectAlert }: Props) {
       </button>
 
       {open && (
-        <div className="glass-strong absolute top-full mt-2 left-1/2 -translate-x-1/2 w-80 rounded-xl p-3 space-y-2 max-h-72 overflow-y-auto">
+        <div className="glass-strong absolute top-full mt-2 right-0 w-80 rounded-xl p-3 space-y-2 max-h-72 overflow-y-auto">
           {REALTIME_ALERTS.map((alertItem) => (
             <button
               key={alertItem.id}

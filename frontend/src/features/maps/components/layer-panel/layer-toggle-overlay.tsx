@@ -14,6 +14,7 @@ const TOGGLES: { key: keyof ShowLayers; label: string }[] = [
   { key: "plants", label: "Industrial Plants" },
   { key: "heatmap", label: "Heatmaps overlay" },
   { key: "contours", label: "Isoline Contours" },
+  { key: "prediction", label: "Prediction labels" },
   { key: "boundaries", label: "Political borders" },
   { key: "roads", label: "Roads & networks" },
   { key: "clouds", label: "Simulated Clouds" },
@@ -24,10 +25,10 @@ interface Props {
   onChange: (layers: ShowLayers) => void;
 }
 
-/** Compact floating overlay on the map canvas — kept minimal per the map-first layout, not a full Card. */
+/** Rendered inline in the side "Layers" flyout, next to BasemapSelector. */
 export function LayerToggleOverlay({ showLayers, onChange }: Props) {
   return (
-    <div className="glass-strong absolute top-4 right-4 rounded-xl p-3.5 space-y-3 z-10 w-44">
+    <div className="glass-strong rounded-xl p-3.5 space-y-3 w-full">
       <h4 className="text-[10px] uppercase font-bold text-ground-400 tracking-wider flex items-center gap-1.5 border-b border-ground-800 pb-1.5">
         <Layers className="h-3 w-3" /> Toggle Layers
       </h4>

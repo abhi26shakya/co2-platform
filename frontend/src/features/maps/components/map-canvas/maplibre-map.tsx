@@ -7,7 +7,7 @@ import { Compass } from "lucide-react";
 import { useMapStore } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
-import { BASEMAP_TILES } from "@/features/maps/lib/basemap-tiles";
+import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
 import { getGasColorHex, getGasPlumes, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
 import {
   buildCircleResult,
@@ -46,6 +46,8 @@ const PLANTS_SOURCE = "plants-source";
 const PLUME_SOURCE = "plume-source";
 const DRAFT_SOURCE = "gis-draft-source";
 const COMPLETED_SOURCE = "gis-completed-source";
+const BOUNDARIES_SOURCE = "boundaries-overlay-source";
+const ROADS_SOURCE = "roads-overlay-source";
 
 /** Builds a raster style for the given basemap id — mirrors the tile choices in the Cesium engine. */
 function buildBasemapStyle(basemapId: string): maplibregl.StyleSpecification {
@@ -75,6 +77,40 @@ function addDataLayers(map: maplibregl.Map) {
         "circle-stroke-color": "#000000",
         "circle-stroke-width": 1.5,
       },
+    });
+    map.addLayer({
+      id: "plants-prediction-label",
+      type: "symbol",
+      source: PLANTS_SOURCE,
+      layout: {
+        visibility: "none",
+        "text-field": ["concat", ["get", "name"], "\n", ["get", "co2"], " ppm"],
+        "text-size": 10,
+        "text-offset": [0, 1.2],
+        "text-anchor": "top",
+      },
+      paint: {
+        "text-color": "#e2e8f0",
+        "text-halo-color": "#09090b",
+        "text-halo-width": 1.2,
+      },
+    });
+  }
+
+  // Overlay-only raster layers (LayerToggleOverlay's boundaries/roads checkboxes) — independent
+  // of basemap choice, composited above it at reduced alpha.
+  if (!map.getSource(BOUNDARIES_SOURCE)) {
+    map.addSource(BOUNDARIES_SOURCE, { type: "raster", tiles: [OVERLAY_TILES.boundaries], tileSize: 256 });
+    map.addLayer({ id: "boundaries-overlay", type: "raster", source: BOUNDARIES_SOURCE, layout: { visibility: "none" } });
+  }
+  if (!map.getSource(ROADS_SOURCE)) {
+    map.addSource(ROADS_SOURCE, { type: "raster", tiles: [OVERLAY_TILES.roads], tileSize: 256 });
+    map.addLayer({
+      id: "roads-overlay",
+      type: "raster",
+      source: ROADS_SOURCE,
+      layout: { visibility: "none" },
+      paint: { "raster-opacity": 0.35 },
     });
   }
 
@@ -234,11 +270,14 @@ export default function MapLibreMap({
     map.on("mouseout", () => setMouseCoords(null));
 
     map.on("moveend", () => {
+      // Deliberately omits pitch: MapLibre's 0-60 "tilt toward horizon" pitch and Cesium's
+      // -90..90 "look direction" pitch are different conventions over the same store field —
+      // writing this engine's value would corrupt the other engine's camera orientation on the
+      // next mode switch. Cesium owns `camera.pitch`; this engine tracks its own tilt locally.
       setCamera({
         lat: map.getCenter().lat,
         lon: map.getCenter().lng,
         zoom: map.getZoom(),
-        pitch: map.getPitch(),
         bearing: map.getBearing(),
       });
     });
@@ -257,7 +296,15 @@ export default function MapLibreMap({
 
     mapRef.current = map;
 
+    // MapLibre bakes in the container's size at construction time; if that size changes later
+    // (side flyout opening/closing, a mode-toggle reflow, or the container simply not having its
+    // final layout size yet on first paint) the canvas keeps rendering at the stale size — it can
+    // go fully blank until something calls resize(). Watch the container directly.
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(containerRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -367,8 +414,15 @@ export default function MapLibreMap({
     };
     visibility("gas-heatmap", showPlumeLayer && activeGasPlumeLayer === "gas-heatmap");
     visibility("gas-markers", showPlumeLayer && activeGasPlumeLayer === "gas-markers");
-    visibility("gas-contour-inner", showPlumeLayer && activeGasPlumeLayer === "contours");
-    visibility("gas-contour-outer", showPlumeLayer && activeGasPlumeLayer === "contours");
+    // "contours" is both a full render mode and an always-on overlay toggle (showLayers.contours) —
+    // show the ring layers whenever either wants them.
+    const showContourRings = showPlumeLayer && (activeGasPlumeLayer === "contours" || showLayers.contours);
+    visibility("gas-contour-inner", showContourRings);
+    visibility("gas-contour-outer", showContourRings);
+
+    visibility("plants-prediction-label", showPlantLayer && showLayers.prediction);
+    visibility("boundaries-overlay", showLayers.boundaries);
+    visibility("roads-overlay", showLayers.roads);
   }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, mapReady]);
 
   const syncCompletedShapes = () => {

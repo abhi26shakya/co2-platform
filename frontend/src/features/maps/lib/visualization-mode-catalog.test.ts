@@ -5,12 +5,12 @@ describe("visualizationModesForMode", () => {
   it("excludes volume3d in 2d mode", () => {
     const ids = visualizationModesForMode("2d").map((m) => m.id);
     expect(ids).not.toContain("volume3d");
-    expect(ids).toEqual(["heatmap", "contours"]);
+    expect(ids).toEqual(["heatmap", "markers", "contours"]);
   });
 
   it("includes every mode in 3d mode", () => {
     const ids = visualizationModesForMode("3d").map((m) => m.id);
-    expect(ids).toEqual(["volume3d", "heatmap", "contours"]);
+    expect(ids).toEqual(["volume3d", "heatmap", "markers", "contours", "animated"]);
   });
 });
 

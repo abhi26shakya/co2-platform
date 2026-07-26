@@ -10,7 +10,7 @@ import { useMapUiStore, type LeftPanelId } from "@/features/maps/store/map-ui-st
 import { useDrawing } from "@/features/maps/hooks/use-drawing";
 import { useMapExport } from "@/features/maps/hooks/use-map-export";
 import { enrichPlants, buildFacilityHistoricalSeries, timeScaleFactor } from "@/features/maps/lib/enrich-plants";
-import { buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
+import { buildFacilityList, buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
 import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/lib/visualization-mode-catalog";
 import { DEFAULT_2D_BASEMAP, isBasemapSupported } from "@/features/maps/lib/basemap-catalog";
 import { buildShareLink } from "@/features/maps/lib/share-link";
@@ -19,12 +19,14 @@ import { BasemapSelector } from "@/features/maps/components/layer-panel/basemap-
 import { GasLayerControls } from "@/features/maps/components/layer-panel/gas-layer-controls";
 import { VisualizationModeSelector } from "@/features/maps/components/layer-panel/visualization-mode-selector";
 import { LayerToggleOverlay, type ShowLayers } from "@/features/maps/components/layer-panel/layer-toggle-overlay";
+import { CloudsOverlay } from "@/features/maps/components/layer-panel/clouds-overlay";
 import { IntensityLegend } from "@/features/maps/components/layer-panel/intensity-legend";
 import { FacilitySearch } from "@/features/maps/components/search/facility-search";
 import { DrawingToolbar } from "@/features/maps/components/gis-tools/drawing-toolbar";
 import { TimelineBar, type TimelinePeriod } from "@/features/maps/components/timeline/timeline-bar";
 import { ComparisonPanel, type ComparisonType } from "@/features/maps/components/comparison/comparison-panel";
 import { InspectorDrawer, type InspectedFacility } from "@/features/maps/components/facility-inspector/inspector-drawer";
+import { PlantInfoBar } from "@/features/maps/components/facility-inspector/plant-info-bar";
 import { AlertsBadge, type MapAlert } from "@/features/maps/components/alerts/alerts-badge";
 import { ExportMenu } from "@/features/maps/components/export-share/export-menu";
 import { ShareDialog } from "@/features/maps/components/export-share/share-dialog";
@@ -68,8 +70,7 @@ const DEFAULT_SHOW_LAYERS: ShowLayers = {
 };
 
 const RAIL_ITEMS: { id: Exclude<LeftPanelId, null>; label: string; icon: typeof SearchIcon }[] = [
-  { id: "search", label: "Search", icon: SearchIcon },
-  { id: "layers", label: "Layers", icon: Globe },
+  { id: "layers", label: "Layers & Basemaps", icon: Globe },
   { id: "gas", label: "Gas Layers", icon: Layers2 },
   { id: "gis", label: "GIS Tools", icon: PenTool },
   { id: "export", label: "Export", icon: DownloadIcon },
@@ -153,11 +154,12 @@ export default function MapPage() {
   }, [isTimelinePlaying, playbackSpeed, ticks.length]);
 
   const searchResults = buildSearchResults(enrichedPlants, hotspots, searchQuery);
+  const allFacilities = buildFacilityList(enrichedPlants);
 
   const handleSelectSearchResult = (result: MapSearchResult) => {
     setSelectedFacility(result.raw);
     setSearchQuery(result.name);
-    openInspectorDrawer();
+    setCameraTarget({ lat: result.lat, lon: result.lon });
   };
 
   const handleSelectAlert = (alert: MapAlert) => {
@@ -165,7 +167,6 @@ export default function MapPage() {
     const match = enrichedPlants.find((p) => p.name.toLowerCase().includes(alert.facility.split(" ")[0].toLowerCase()));
     if (match) {
       setSelectedFacility(match);
-      openInspectorDrawer();
     }
     setAlertsOpen(false);
   };
@@ -228,13 +229,10 @@ export default function MapPage() {
         {/* Flyout panel — only one open at a time */}
         {activePanel && (
           <div className="w-72 shrink-0 space-y-4 animate-in fade-in slide-in-from-left-2 duration-150">
-            {activePanel === "search" && (
-              <FacilitySearch query={searchQuery} onQueryChange={setSearchQuery} results={searchResults} onSelect={handleSelectSearchResult} />
-            )}
             {activePanel === "layers" && (
               <>
                 <BasemapSelector activeBasemap={effectiveBasemap} mapMode={mapMode} onSelect={setActiveBasemap} />
-                <VisualizationModeSelector selectedMode={effectiveVisualizationMode} mapMode={mapMode} onSelect={setVisualizationMode} />
+                <LayerToggleOverlay showLayers={showLayers} onChange={setShowLayers} />
               </>
             )}
             {activePanel === "gas" && <GasLayerControls gases={gases} onToggle={toggleGas} onOpacityChange={setGasOpacity} />}
@@ -284,7 +282,7 @@ export default function MapPage() {
                 activeBasemap={effectiveBasemap}
                 onSelectFacility={(fac) => {
                   setSelectedFacility(fac);
-                  openInspectorDrawer();
+                  setCameraTarget({ lat: fac.lat, lon: fac.lon });
                 }}
                 drawingMode={drawing.drawingMode}
                 comparisonMode={comparisonMode}
@@ -305,7 +303,7 @@ export default function MapPage() {
                 activeBasemap={effectiveBasemap}
                 onSelectFacility={(fac) => {
                   setSelectedFacility(fac);
-                  openInspectorDrawer();
+                  setCameraTarget({ lat: fac.lat, lon: fac.lon });
                 }}
                 drawingMode={drawing.drawingMode}
                 comparisonMode={comparisonMode}
@@ -318,10 +316,41 @@ export default function MapPage() {
               />
             )}
 
+            {/* Top control bar: search + render mode, always visible above the map. Kept to a
+                single row (no wrap) so it can never grow tall enough to collide with ModeToggle
+                anchored at top-20 below it — the search box shrinks on narrow viewports instead. */}
+            <div className="absolute top-4 left-4 right-4 z-20 flex items-start gap-2">
+              <div className="min-w-0 max-w-80 flex-1">
+                <FacilitySearch
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                  results={searchResults}
+                  onSelect={handleSelectSearchResult}
+                  allFacilities={allFacilities}
+                />
+              </div>
+              <div className="shrink-0">
+                <VisualizationModeSelector
+                  variant="compact"
+                  selectedMode={effectiveVisualizationMode}
+                  mapMode={mapMode}
+                  onSelect={setVisualizationMode}
+                />
+              </div>
+            </div>
+
             <ModeToggle mode={mapMode} onChange={setMapMode} />
             <AlertsBadge open={alertsOpen} onToggle={() => setAlertsOpen(!alertsOpen)} onSelectAlert={handleSelectAlert} />
-            <LayerToggleOverlay showLayers={showLayers} onChange={setShowLayers} />
             <IntensityLegend timeFactor={timeFactor} />
+            {showLayers.clouds && <CloudsOverlay />}
+            <PlantInfoBar
+              facility={inspectedFacility}
+              onOpenDetails={openInspectorDrawer}
+              onClear={() => {
+                setSelectedFacility(null);
+                closeInspectorDrawer();
+              }}
+            />
           </div>
 
           <TimelineBar

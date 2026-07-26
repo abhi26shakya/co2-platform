@@ -18,7 +18,7 @@ describe("activePanel", () => {
   });
 
   it("togglePanel switches to a different panel", () => {
-    useMapUiStore.getState().setActivePanel("search");
+    useMapUiStore.getState().setActivePanel("export");
     useMapUiStore.getState().togglePanel("gis");
     expect(useMapUiStore.getState().activePanel).toBe("gis");
   });
