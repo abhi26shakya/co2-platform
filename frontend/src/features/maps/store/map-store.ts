@@ -78,7 +78,11 @@ const getSavedMapMode = (): MapMode => {
     const saved = localStorage.getItem(STORAGE_KEY_MAP_MODE);
     if (saved === "2d" || saved === "3d") return saved;
   }
-  return "3d";
+  // Temporary stopgap: 3D (Cesium) reliably crashes the browser tab on the deployed Vercel
+  // build (reproduced consistently, root cause not yet identified — works fine against a local
+  // dev server, so likely something production-build-specific). Defaulting new users to 2D
+  // avoids greeting them with a crash; users can still opt into 3D manually via the toggle.
+  return "2d";
 };
 
 const getSavedCamera = (): CameraState => {

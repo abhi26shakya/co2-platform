@@ -245,6 +245,46 @@ Maintain current unresolved issues here.
 
 Issues requiring immediate attention.
 
+## KI-004 — 3D map mode (Cesium) crashes the browser tab on the deployed Vercel build
+
+**Classification**: Bug
+**Discovered**: 2026-07-27, reported by the user hitting `co2-platform-nine.vercel.app/maps`
+(a real "This page couldn't load" Chrome renderer-crash screen, not an app
+error boundary).
+**Description**: Navigating to `/maps` in 3D mode (the previous default),
+or toggling from 2D to 3D, reliably crashes the tab within ~2-3 seconds —
+reproduced consistently against the deployed site. 2D (MapLibre) mode
+works correctly on the same deployment (real basemap tiles, controls,
+live data all render fine). Ruled out so far:
+- Not a data-volume issue — the mock API fallback (prod has no live
+  backend behind this Vercel deployment) returns only 4 plants / 2
+  hotspots, fewer than local/seeded data.
+- Not a CSP/security-header issue — no `next.config.ts` headers or
+  `vercel.json` exist that would block Cesium's workers/WASM.
+- Not (apparently) a code-level regression from tonight's camera/zoom
+  hardening — that exact Cesium code was extensively stress-tested
+  against a local `next dev` server the same session with zero crashes,
+  including the same camera.changed/setView paths.
+**Impact**: Anyone visiting the deployed site's Maps section in 3D mode
+loses their browser tab. This was the default mode, so it very likely hit
+every first-time visitor.
+**Root cause**: Not yet identified. Suspected production-build-specific
+(minification/chunking/timing) interaction with Cesium's global `<script>`
+loading, or a GPU/renderer crash specific to the deployment's runtime —
+neither confirmed. Following leads require access this session didn't
+have: `chrome://gpu` / `chrome://crashes` on the affected browser (blocked
+for browser-automation tools), and an Incognito-window repro to rule out
+interfering extensions.
+**Stopgap applied**: Changed `getSavedMapMode()`'s fallback in
+`frontend/src/features/maps/store/map-store.ts` from `"3d"` to `"2d"`, so
+new visitors (no `emissia-map-mode` in localStorage yet) land on the
+working 2D mode instead of crashing. This does **not** fix 3D itself —
+toggling to 3D manually still crashes — and does not help visitors who
+already have `"3d"` persisted in localStorage from a prior visit.
+**Resolution Plan**: Unscheduled — needs the browser-side diagnostics
+above (chrome://gpu/crashes, Incognito repro) before a real root-cause fix
+can be attempted.
+
 ---
 
 # High Priority Issues
