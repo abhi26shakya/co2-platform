@@ -39,6 +39,7 @@ export function ShareDialog({ open, link, onClose }: Props) {
         <div className="flex flex-col items-center justify-center space-y-2 p-3.5 bg-ground-950 rounded-lg border border-ground-800">
           <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">Scan to Open Map</span>
           {qrRequested ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external QR generator, not eligible for next/image optimization
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=10b981&bgcolor=09090b&data=${encodeURIComponent(link)}`}
               alt="Emissia Map QR Code"

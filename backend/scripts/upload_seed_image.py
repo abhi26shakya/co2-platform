@@ -1,9 +1,10 @@
 import asyncio
+
+import httpx
 import numpy as np
 import rasterio
 import rasterio.io
 from rasterio.transform import from_bounds
-import httpx
 
 BOUNDS = (79.5, 22.5, 79.6, 22.6)
 

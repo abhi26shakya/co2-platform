@@ -9,14 +9,15 @@ import { useEffect, useState } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [checked, setChecked] = useState(false);
+  // Token presence is known synchronously (localStorage-backed), so this can be a lazy
+  // initializer instead of effect-driven state — the effect below only needs to perform the
+  // redirect side effect, not set any state.
+  const [checked] = useState(() => Boolean(tokens.access || tokens.refresh));
   const { focusMode, setFocusMode, setMobileOpen } = useSidebarStore();
 
   useEffect(() => {
     if (!tokens.access && !tokens.refresh) {
       router.replace("/login");
-    } else {
-      setChecked(true);
     }
   }, [router]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import dynamic from "next/dynamic";
@@ -24,6 +24,10 @@ const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/
     </div>
   ),
 });
+
+type ResolvedShare =
+  | { ok: true; config: ShareConfig; passwordLocked: boolean }
+  | { ok: false; errorMsg: string };
 
 interface ShareConfig {
   id: string;
@@ -49,6 +53,62 @@ interface ShareConfig {
   includedParts?: Record<string, boolean>;
 }
 
+/** Scans localStorage for the share config matching `shareId`, and — if found, live, and
+ *  enabled — records a view. A real function (not inlined) so its early `return`s stay scoped
+ *  to itself rather than to whatever calls it. */
+function resolveShare(shareId: string): ResolvedShare {
+  let foundConfig: ShareConfig | null = null;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key?.startsWith("emissia_share_resource_")) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "");
+        if (parsed.id === shareId) {
+          foundConfig = parsed;
+          break;
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  if (!foundConfig) {
+    return { ok: false, errorMsg: "This share link could not be found or has been deleted." };
+  }
+
+  if (foundConfig.expiresAt && new Date(foundConfig.expiresAt) < new Date()) {
+    return { ok: false, errorMsg: "This share link has expired." };
+  }
+
+  if (foundConfig.status === "disabled") {
+    return { ok: false, errorMsg: "This share link has been disabled by the owner." };
+  }
+
+  // Increment view count dynamically in localStorage
+  try {
+    foundConfig.views = (foundConfig.views || 0) + 1;
+    localStorage.setItem(
+      `emissia_share_resource_${foundConfig.resourceType}_${foundConfig.resourceId}`,
+      JSON.stringify(foundConfig)
+    );
+
+    // Update global list view counts
+    const globalListRaw = localStorage.getItem("emissia_shared_links_list");
+    if (globalListRaw) {
+      const globalList = JSON.parse(globalListRaw);
+      const updated = globalList.map((item: { id: string; views: number }) =>
+        item.id === shareId ? { ...item, views: item.views + 1 } : item
+      );
+      localStorage.setItem("emissia_shared_links_list", JSON.stringify(updated));
+    }
+  } catch {
+    // Ignore
+  }
+
+  return { ok: true, config: foundConfig, passwordLocked: Boolean(foundConfig.password) };
+}
+
 export default function PublicSharePage() {
   const params = useParams();
   const shareId = params.id as string;
@@ -62,78 +122,22 @@ export default function PublicSharePage() {
   const [passwordLocked, setPasswordLocked] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    // Search all localStorage keys for the matching share config ID
-    let foundConfig: ShareConfig | null = null;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("emissia_share_resource_")) {
-        try {
-          const parsed = JSON.parse(localStorage.getItem(key) || "");
-          if (parsed.id === shareId) {
-            foundConfig = parsed;
-            break;
-          }
-        } catch {
-          // Ignore
-        }
-      }
+  // Resolves the share config for `shareId` — has real side effects (a localStorage view-count
+  // mutation via resolveShare), so it can't be a plain derived value, but it only needs to redo
+  // that work when `shareId` itself changes. Adjusted directly during render (React's documented
+  // pattern for this) rather than in an effect, which would cost an extra render pass.
+  const [syncedShareId, setSyncedShareId] = useState<string | null>(null);
+  if (typeof window !== "undefined" && shareId && shareId !== syncedShareId) {
+    setSyncedShareId(shareId);
+    const result = resolveShare(shareId);
+    if (result.ok) {
+      setConfig(result.config);
+      setPasswordLocked(result.passwordLocked);
+    } else {
+      setErrorMsg(result.errorMsg);
     }
-
-    if (!foundConfig) {
-      setErrorMsg("This share link could not be found or has been deleted.");
-      setLoading(false);
-      return;
-    }
-
-    // Check expiration
-    if (foundConfig.expiresAt) {
-      const isExpired = new Date(foundConfig.expiresAt) < new Date();
-      if (isExpired) {
-        setErrorMsg("This share link has expired.");
-        setLoading(false);
-        return;
-      }
-    }
-
-    // Check disabled status
-    if (foundConfig.status === "disabled") {
-      setErrorMsg("This share link has been disabled by the owner.");
-      setLoading(false);
-      return;
-    }
-
-    // Check password protection
-    if (foundConfig.password) {
-      setPasswordLocked(true);
-    }
-
-    // Increment view count dynamically in localStorage
-    try {
-      foundConfig.views = (foundConfig.views || 0) + 1;
-      localStorage.setItem(`emissia_share_resource_${foundConfig.resourceType}_${foundConfig.resourceId}`, JSON.stringify(foundConfig));
-      
-      // Update global list view counts
-      const globalListRaw = localStorage.getItem("emissia_shared_links_list");
-      if (globalListRaw) {
-        const globalList = JSON.parse(globalListRaw);
-        const updated = globalList.map((item: { id: string; views: number }) => {
-          if (item.id === shareId) {
-            return { ...item, views: item.views + 1 };
-          }
-          return item;
-        });
-        localStorage.setItem("emissia_shared_links_list", JSON.stringify(updated));
-      }
-    } catch {
-      // Ignore
-    }
-
-    setConfig(foundConfig);
     setLoading(false);
-  }, [shareId]);
+  }
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();

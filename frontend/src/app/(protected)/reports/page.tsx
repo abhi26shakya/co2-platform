@@ -11,9 +11,7 @@ import {
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
 import {
   FileText,
-  FileSpreadsheet,
   Search,
-  Filter,
   ArrowUpDown,
   Plus,
   Star,
@@ -25,29 +23,21 @@ import {
   History,
   MessageSquare,
   Send,
-  Check,
-  Globe,
-  Lock,
-  Clock,
-  ExternalLink,
-  ChevronDown,
   Printer,
-  Maximize2,
   User,
   MoreVertical,
   Edit3,
   Copy,
-  ChevronRight,
   FolderOpen,
   BarChart3,
   Map as MapIcon
 } from "lucide-react";
 import Link from "next/link";
-import type { ReportOut, ReportComment, ReportVersion } from "@/types/report";
+import type { ReportOut, ReportComment } from "@/types/report";
 
 export default function ReportsPage() {
   const { data: reports = [], isLoading } = useReports();
-  const { data: dashboardStats } = useDashboard();
+  useDashboard();
   const createReport = useCreateReport();
   const updateReport = useUpdateReport();
   const deleteReport = useDeleteReport();
@@ -83,11 +73,9 @@ export default function ReportsPage() {
   
   // Interactive Map Options in Viewer
   const [mapZoom, setMapZoom] = useState(9);
-  const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
   const [showPlumeHeatmap, setShowPlumeHeatmap] = useState(true);
   const [showFacilityMarkers, setShowFacilityMarkers] = useState(true);
-  const [showMapLabels, setShowMapLabels] = useState(true);
-  const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [showMapLabels] = useState(true);
 
   // Comments state
   const [newCommentText, setNewCommentText] = useState("");
@@ -280,7 +268,6 @@ export default function ReportsPage() {
 
   // Generate secure link flow
   const generateShareLink = (r: ReportOut) => {
-    const expiryText = shareConfig.expiration === "never" ? "never expires" : `expires in ${shareConfig.expiration}`;
     const mockUrl = `https://co2-platform.github.vercel.app/share/report-${r.id.substring(0, 8)}`;
     setShareSuccessLink(mockUrl);
     
@@ -402,7 +389,7 @@ export default function ReportsPage() {
           <ArrowUpDown className="h-4 w-4 text-ground-400" />
           <select
             value={sortField}
-            onChange={(e) => setSortField(e.target.value as any)}
+            onChange={(e) => setSortField(e.target.value as "newest" | "oldest" | "downloads" | "confidence" | "name")}
             className="bg-ground-950 border border-ground-700/80 text-sm text-ground-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-ground-400 cursor-pointer"
           >
             <option value="newest">Newest First</option>
@@ -430,7 +417,11 @@ export default function ReportsPage() {
           return (
             <button
               key={tab.id}
-              onClick={() => setFilterTab(tab.id as any)}
+              onClick={() =>
+                setFilterTab(
+                  tab.id as "all" | "favorites" | "shared" | "archived" | "trash" | "pdf" | "csv" | "geojson"
+                )
+              }
               className={`px-3 py-1 text-xs font-medium rounded-full cursor-pointer transition-all ${
                 active
                   ? "bg-ground-800 text-instrument border border-ground-700"
@@ -730,7 +721,9 @@ export default function ReportsPage() {
                   return (
                     <button
                       key={item.id}
-                      onClick={() => setViewerTab(item.id as any)}
+                      onClick={() =>
+                        setViewerTab(item.id as "summary" | "map" | "facilities" | "charts" | "comments" | "versions")
+                      }
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs font-medium cursor-pointer transition-colors ${
                         active
                           ? "bg-ground-800 text-sensor font-semibold"
@@ -1223,7 +1216,9 @@ export default function ReportsPage() {
                   <label className="text-ground-400 block font-semibold">Permission Scope</label>
                   <select
                     value={shareConfig.permission}
-                    onChange={(e) => setShareConfig({ ...shareConfig, permission: e.target.value as any })}
+                    onChange={(e) =>
+                      setShareConfig({ ...shareConfig, permission: e.target.value as "private" | "organization" | "public" })
+                    }
                     className="w-full bg-ground-950 border border-ground-700 rounded-lg px-2.5 py-1.5 focus:outline-none"
                   >
                     <option value="private">Private (Only You)</option>
@@ -1236,7 +1231,9 @@ export default function ReportsPage() {
                   <label className="text-ground-400 block font-semibold">Link Expiration</label>
                   <select
                     value={shareConfig.expiration}
-                    onChange={(e) => setShareConfig({ ...shareConfig, expiration: e.target.value as any })}
+                    onChange={(e) =>
+                      setShareConfig({ ...shareConfig, expiration: e.target.value as "never" | "24h" | "7d" | "30d" })
+                    }
                     className="w-full bg-ground-950 border border-ground-700 rounded-lg px-2.5 py-1.5 focus:outline-none"
                   >
                     <option value="never">Never expire</option>
