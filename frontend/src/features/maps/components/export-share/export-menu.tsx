@@ -8,7 +8,7 @@ const FORMATS: { format: ExportFormat; label: string; simulated?: boolean }[] = 
   { format: "csv", label: "CSV Table" },
   { format: "json", label: "JSON Metadata" },
   { format: "tiff", label: "GeoTIFF (Raster)", simulated: true },
-  { format: "pdf", label: "PDF Report", simulated: true },
+  { format: "pdf", label: "PDF Report" },
 ];
 
 interface Props {
@@ -69,7 +69,9 @@ export function ExportMenu({ activeFormat, progress, history, onExport }: Props)
                   <span>
                     {hist.time} &middot; {hist.format}
                   </span>
-                  <span className="text-sensor font-bold uppercase">{hist.status}</span>
+                  <span className={`font-bold uppercase ${hist.status === "Failed" ? "text-red-400" : "text-sensor"}`}>
+                    {hist.status}
+                  </span>
                 </div>
               ))}
             </div>

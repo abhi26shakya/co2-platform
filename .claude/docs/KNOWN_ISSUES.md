@@ -354,6 +354,49 @@ Priority: Low.
 
 Planned Resolution: Unscheduled cleanup task.
 
+## Debt Item: `frontend/src/types/report.ts`'s `ReportOut` doesn't match the real backend schema
+
+Status: Active — discovered 2026-07-26 during Map Section Redesign
+Milestone 5, not introduced by it.
+
+Description: `types/report.ts` carries a comment claiming it "mirrors
+backend/app/schemas/report.py + model.py," but the real backend
+`ReportOut` (`backend/app/schemas/report.py`) only has `id`, `title`,
+`format`, `params`, `created_at`, `url`. The frontend type instead
+declares ~20 additional fields the API never returns — `dataset_name`,
+`satellite_source`, `confidence_score`, `estimated_co2`,
+`detected_facilities`, `hotspots`, `is_favorite`, `comments`, `versions`,
+etc. Anything in `features/reports/` (or elsewhere) typed against this
+interface can compile cleanly while reading `undefined` at runtime for
+every one of those extra fields.
+
+Reason Introduced: Unknown — likely written against an earlier, richer
+mocked/imagined API contract before the real `/reports` endpoint was
+implemented more simply, and never reconciled afterward.
+
+Impact: Silent runtime mismatch, not a type error — any reports-feature
+UI relying on the extra fields (favorites, comments, versions, confidence
+score, etc.) is likely rendering `undefined`/blank rather than throwing,
+which makes the bug easy to miss without checking against real API
+responses. The map export feature (Milestone 5) worked around this by
+declaring its own minimal, correctly-typed `CreatedReport` interface
+locally in `use-map-export.ts` rather than trusting the shared type.
+
+Estimated Effort: Medium — requires auditing every consumer of `ReportOut`
+across `features/reports/` to see which fields are actually rendered vs.
+assumed, then correcting the type and any UI that was relying on
+non-existent fields (may reveal additional reports-feature bugs once
+fixed).
+
+Priority: Medium — not urgent (nothing crashes), but actively misleading
+for anyone extending the reports feature, and a likely source of "why is
+this always blank" bugs.
+
+Planned Resolution: Unscheduled. Candidate for a future `/bug` or
+`/refactor` pass on the reports feature specifically.
+
+Related Components: Frontend (`features/reports/`, `types/report.ts`)
+
 ---
 
 # Known Limitations
