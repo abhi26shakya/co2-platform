@@ -297,6 +297,17 @@ For each item include:
 
 ## Debt Item: `emission-map.tsx` is a 1045-line monolithic component
 
+**Status: Resolved (2026-07-26)** — Map Section Redesign Milestone 1.
+`frontend/src/app/(protected)/maps/page.tsx` and the old
+`frontend/src/features/maps/components/map/emission-map.tsx` were split into
+`features/maps/components/{map-canvas,map-controls,layer-panel,search,
+gis-tools,timeline,comparison,facility-inspector,alerts,export-share}/`,
+new hooks (`use-drawing.ts`, `use-map-export.ts`), a `map-ui-store.ts` for
+left-rail/drawer UI state, and pure GIS geometry helpers in
+`gis-tools/lib/geo-math.ts` (unit-tested — the exact gap this item called
+out). `page.tsx` is now composition-only. See `PROJECT_PROGRESS.md` for the
+full breakdown.
+
 Description: All map rendering modes, GIS drawing/export tools, timeline
 playback, compare-predictions sub-modes, and real-time alerts logic live
 inline in one component (`frontend/src/features/maps/components/map/
