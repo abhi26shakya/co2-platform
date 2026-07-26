@@ -2,6 +2,11 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 
+function readLocal(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return localStorage.getItem(key) ?? fallback;
+}
+
 interface SettingsContextType {
   theme: string;
   resolvedTheme: string;
@@ -31,46 +36,26 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(() => readLocal("settings_appearance_theme", "dark"));
   const [resolvedTheme, setResolvedTheme] = useState("dark");
-  const [accent, setAccent] = useState("green");
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const [compactMode, setCompactMode] = useState(false);
+  const [accent, setAccent] = useState(() => readLocal("settings_appearance_accent", "green"));
+  const [reducedMotion, setReducedMotion] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("settings_appearance_reduced_motion") === "true"
+  );
+  const [compactMode, setCompactMode] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("settings_appearance_compact_mode") === "true"
+  );
 
-  const [aiModel, setAiModel] = useState("unet-v1");
-  const [aiThreshold, setAiThreshold] = useState(85);
-  const [aiPalette, setAiPalette] = useState("viridis");
-  const [aiUnits, setAiUnits] = useState("t/year");
-  const [aiAutorun, setAiAutorun] = useState(true);
-  const [aiExplainable, setAiExplainable] = useState(false);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("settings_appearance_theme") || "dark";
-      const savedAccent = localStorage.getItem("settings_appearance_accent") || "green";
-      const savedMotion = localStorage.getItem("settings_appearance_reduced_motion") === "true";
-      const savedCompact = localStorage.getItem("settings_appearance_compact_mode") === "true";
-
-      const savedAiModel = localStorage.getItem("settings_ai_model") || "unet-v1";
-      const savedAiThreshold = Number(localStorage.getItem("settings_ai_threshold") || "85");
-      const savedAiPalette = localStorage.getItem("settings_ai_palette") || "viridis";
-      const savedAiUnits = localStorage.getItem("settings_ai_units") || "t/year";
-      const savedAiAutorun = localStorage.getItem("settings_ai_autorun") !== "false";
-      const savedAiExplainable = localStorage.getItem("settings_ai_explainable") === "true";
-
-      setTheme(savedTheme);
-      setAccent(savedAccent);
-      setReducedMotion(savedMotion);
-      setCompactMode(savedCompact);
-      setAiModel(savedAiModel);
-      setAiThreshold(savedAiThreshold);
-      setAiPalette(savedAiPalette);
-      setAiUnits(savedAiUnits);
-      setAiAutorun(savedAiAutorun);
-      setAiExplainable(savedAiExplainable);
-    }
-  }, []);
+  const [aiModel, setAiModel] = useState(() => readLocal("settings_ai_model", "unet-v1"));
+  const [aiThreshold, setAiThreshold] = useState(() => Number(readLocal("settings_ai_threshold", "85")));
+  const [aiPalette, setAiPalette] = useState(() => readLocal("settings_ai_palette", "viridis"));
+  const [aiUnits, setAiUnits] = useState(() => readLocal("settings_ai_units", "t/year"));
+  const [aiAutorun, setAiAutorun] = useState(
+    () => typeof window === "undefined" || localStorage.getItem("settings_ai_autorun") !== "false"
+  );
+  const [aiExplainable, setAiExplainable] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem("settings_ai_explainable") === "true"
+  );
 
   // Sync resolved theme with theme + media query
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { api } from "@/services/api-client";
@@ -38,17 +38,16 @@ export default function ProcessingPage() {
   // Simulated progress states
   const [progress, setProgress] = useState(0);
   const [estimatedRemaining, setEstimatedRemaining] = useState(25);
-  const [activeStage, setActiveStage] = useState(0); // 0: Sat, 1: Img, 2: Model, 3: Heatmap, 4: Report
-  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-  const [activeStep, setActiveStep] = useState(0);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logsExpanded, setLogsExpanded] = useState(true);
 
-  const [hasTriggeredPrediction, setHasTriggeredPrediction] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const [simulatedComplete, setSimulatedComplete] = useState(false);
 
   const logsEndRef = useRef<HTMLDivElement | null>(null);
+  // Guards for one-shot effect work — refs rather than state, since they don't drive rendering
+  // and mutating them shouldn't itself trigger a re-render.
+  const loadedImageIdRef = useRef<string | null>(null);
+  const hasTriggeredPredictionRef = useRef(false);
 
   const triggerError = useCallback((msg: string) => {
     console.error(msg);
@@ -56,7 +55,8 @@ export default function ProcessingPage() {
 
   // 1. Fetch image details
   useEffect(() => {
-    if (imageId) {
+    if (imageId && loadedImageIdRef.current !== imageId) {
+      loadedImageIdRef.current = imageId;
       setLoadingImage(true);
       api
         .get<ImageOut>(`/images/${imageId}`)
@@ -74,11 +74,17 @@ export default function ProcessingPage() {
 
   // 2. Trigger Prediction Mutation
   useEffect(() => {
-    if (image && !hasTriggeredPrediction) {
-      setHasTriggeredPrediction(true);
+    if (image && !hasTriggeredPredictionRef.current) {
+      hasTriggeredPredictionRef.current = true;
       runPrediction.mutate(image.id);
     }
-  }, [image, hasTriggeredPrediction, runPrediction]);
+  }, [image, runPrediction]);
+
+  // Active stage/step/completed-steps are pure derivations of `progress` — no state or effect
+  // needed, computed directly during render.
+  const activeStage = progress < 20 ? 0 : progress < 40 ? 1 : progress < 60 ? 2 : progress < 80 ? 3 : 4;
+  const activeStep = Math.min(10, Math.floor((progress / 100) * 11));
+  const completedSteps = Array.from({ length: activeStep }, (_, i) => i);
 
   // 3. Simulated progress timer
   useEffect(() => {
@@ -104,29 +110,9 @@ export default function ProcessingPage() {
     return () => clearInterval(interval);
   }, [image, runPrediction.isSuccess, runPrediction.isError]);
 
-  // Handle active stage and active steps mapping
-  useEffect(() => {
-    // Stage mapping
-    if (progress < 20) setActiveStage(0);
-    else if (progress < 40) setActiveStage(1);
-    else if (progress < 60) setActiveStage(2);
-    else if (progress < 80) setActiveStage(3);
-    else setActiveStage(4);
-
-    // Steps mapping (total 11 steps)
-    const stepIndex = Math.min(10, Math.floor((progress / 100) * 11));
-    setActiveStep(stepIndex);
-
-    // Update completed steps array
-    const completed: number[] = [];
-    for (let i = 0; i < stepIndex; i++) {
-      completed.push(i);
-    }
-    setCompletedSteps(completed);
-  }, [progress]);
-
-  // 4. Generate dynamic log events matching progress
-  useEffect(() => {
+  // Simulated log events matching progress — a pure (if wall-clock-flavored) derivation of
+  // `progress`, memoized rather than tracked as separate effect-driven state.
+  const logs = useMemo<LogEntry[]>(() => {
     const logMessages = [
       "Reading GeoTIFF metadata...",
       "Metadata extracted successfully.",
@@ -148,8 +134,7 @@ export default function ProcessingPage() {
 
     const elapsed = Math.floor((progress / 100) * logMessages.length);
     const displayedLogs: LogEntry[] = [];
-    
-    // Set base time
+
     const baseTime = new Date();
     baseTime.setSeconds(baseTime.getSeconds() - 25);
 
@@ -159,7 +144,7 @@ export default function ProcessingPage() {
       displayedLogs.push({ time: timeStr, message: logMessages[i] });
     }
 
-    setLogs(displayedLogs);
+    return displayedLogs;
   }, [progress]);
 
   // Auto-scroll logs panel
@@ -238,7 +223,7 @@ export default function ProcessingPage() {
         <div className="flex justify-center gap-3">
           <button
             onClick={() => {
-              setHasTriggeredPrediction(false);
+              hasTriggeredPredictionRef.current = false;
               setProgress(0);
               setSimulatedComplete(false);
               runPrediction.reset();

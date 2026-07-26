@@ -3,6 +3,7 @@
 import { StatCard } from "@/features/dashboard/components/dashboard/stat-card";
 import { Card } from "@/components/ui/card";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import type { RecentUpload } from "@/types/dashboard";
 import { useReports } from "@/features/reports/hooks/use-reports";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/providers/providers/settings-provider";
@@ -81,7 +82,7 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-ground-750">
-              {data?.recent_uploads.map((u: any) => (
+              {data?.recent_uploads.map((u: RecentUpload) => (
                 <li key={u.id} className="flex items-baseline justify-between py-2.5 text-sm text-instrument">
                   <span className="truncate pr-4">{u.filename}</span>
                   <span className="readout shrink-0 text-xs text-ground-400">

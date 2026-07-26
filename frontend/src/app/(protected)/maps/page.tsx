@@ -126,11 +126,12 @@ export default function MapPage() {
 
   let inspectedFacility: InspectedFacility | null = null;
   if (selectedFacility) {
-    const baseCo2 = selectedFacility.co2_enhancement_ppm || parseFloat(selectedFacility.co2) || 45.5;
+    const baseCo2 = selectedFacility.co2_enhancement_ppm || parseFloat(String(selectedFacility.co2)) || 45.5;
     const historical = buildFacilityHistoricalSeries(baseCo2, ticks);
     const currentValue = historical[sliderIndex]?.value ?? baseCo2;
     inspectedFacility = {
       ...selectedFacility,
+      name: selectedFacility.name ?? "Unknown facility",
       latest_prediction: `${currentValue.toFixed(2)} ppm`,
       historical,
     };
@@ -282,7 +283,9 @@ export default function MapPage() {
                 activeBasemap={effectiveBasemap}
                 onSelectFacility={(fac) => {
                   setSelectedFacility(fac);
-                  setCameraTarget({ lat: fac.lat, lon: fac.lon });
+                  if (fac.lat != null && fac.lon != null) {
+                    setCameraTarget({ lat: fac.lat, lon: fac.lon });
+                  }
                 }}
                 drawingMode={drawing.drawingMode}
                 comparisonMode={comparisonMode}
@@ -303,7 +306,9 @@ export default function MapPage() {
                 activeBasemap={effectiveBasemap}
                 onSelectFacility={(fac) => {
                   setSelectedFacility(fac);
-                  setCameraTarget({ lat: fac.lat, lon: fac.lon });
+                  if (fac.lat != null && fac.lon != null) {
+                    setCameraTarget({ lat: fac.lat, lon: fac.lon });
+                  }
                 }}
                 drawingMode={drawing.drawingMode}
                 comparisonMode={comparisonMode}

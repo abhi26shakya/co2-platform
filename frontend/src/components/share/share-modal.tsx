@@ -82,8 +82,9 @@ export function ShareModal({
   // Generate or load existing share config on open. Reactive to `isOpen`
   // rather than mount, since the modal stays mounted between opens and must
   // re-derive its state each time it's opened for a (possibly different)
-  // resource — not expressible as a lazy useState initializer.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // resource — not expressible as a lazy useState initializer. Genuinely needs to stay an
+  // effect (rather than the render-time-adjust pattern used elsewhere in this cleanup) because
+  // generateNewId() calls Math.random(), which React's purity rules disallow during render.
   useEffect(() => {
     if (isOpen) {
       // Look for existing share link for this resource
@@ -91,6 +92,7 @@ export function ShareModal({
       if (existing) {
         try {
           const parsed = JSON.parse(existing);
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- see comment above
           setShareId(parsed.id);
           setVisibility(parsed.visibility);
           setPermission(parsed.permission);

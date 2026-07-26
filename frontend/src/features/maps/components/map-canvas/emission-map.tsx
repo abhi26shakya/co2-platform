@@ -1,7 +1,13 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Cesium is loaded as a global <script> tag
+ * (see CLAUDE.md "ML integration boundary"/frontend architecture notes), not the npm package, so
+ * there's no TypeScript surface for it here beyond `any`. Pulling in the `cesium` package just
+ * for its .d.ts files would add ~80MB for typings alone; hand-rolling a partial declaration file
+ * for the (large) subset of the API used below risks silently-wrong types. `any` is the honest
+ * signal for "untyped external global," not a stand-in for real typing that was skipped. */
 import { useEffect, useRef, useState } from "react";
-import { useMapStore } from "@/features/maps/store/map-store";
+import { useMapStore, type SelectedFacility } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { Compass } from "lucide-react";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
@@ -27,7 +33,7 @@ interface Props {
   showHotspots: boolean;
   selectedMode?: string;
   activeBasemap?: string;
-  onSelectFacility?: (fac: any) => void;
+  onSelectFacility?: (fac: SelectedFacility) => void;
   drawingMode?: DrawingMode;
   comparisonMode?: boolean;
   showLayers?: ShowLayers;
@@ -67,14 +73,13 @@ export default function EmissionMap({
   const { camera, setCamera, selectedFacility, setSelectedFacility, gases } = useMapStore();
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    const checkCesium = () => {
+    const interval = setInterval(checkCesium, 100);
+    function checkCesium() {
       if (typeof window !== "undefined" && (window as any).Cesium) {
         setCesiumReady(true);
         clearInterval(interval);
       }
-    };
-    interval = setInterval(checkCesium, 100);
+    }
     checkCesium();
     return () => clearInterval(interval);
   }, []);
@@ -551,7 +556,7 @@ export default function EmissionMap({
     if (!viewer || drawingMode === "none") return;
 
     const Cesium = (window as any).Cesium;
-    let activePoints: any[] = [];
+    const activePoints: any[] = [];
     const entityCollection: any[] = [];
     let isDrawing = false;
     let anchorPoint: any = null;

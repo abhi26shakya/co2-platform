@@ -1,6 +1,7 @@
 /** Typed fetch wrapper: attaches the bearer token, and on a 401 performs a
  *  single-flight refresh-and-retry before giving up. */
 import { tokens } from "@/lib/auth-tokens";
+import type { ReportOut } from "@/types/report";
 
 const BASE = "/api/v1";
 
@@ -65,7 +66,7 @@ function saveMockUser(user: MockUser) {
   localStorage.setItem("mock_db_users", JSON.stringify(filtered));
 }
 
-const DEFAULT_REPORTS = [
+const DEFAULT_REPORTS: ReportOut[] = [
   {
     id: "report-1",
     title: "Vindhyachal Thermal Emission Analysis",
@@ -170,7 +171,7 @@ const DEFAULT_REPORTS = [
   }
 ];
 
-function getMockReports(): any[] {
+function getMockReports(): ReportOut[] {
   if (typeof window === "undefined") return DEFAULT_REPORTS;
   try {
     const raw = localStorage.getItem("mock_db_reports");
@@ -180,7 +181,7 @@ function getMockReports(): any[] {
   return DEFAULT_REPORTS;
 }
 
-function saveMockReports(reports: any[]) {
+function saveMockReports(reports: ReportOut[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem("mock_db_reports", JSON.stringify(reports));
 }
@@ -535,7 +536,7 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
     const satellite = "Sentinel-5P";
     
     // Auto-generate report
-    const newReport = {
+    const newReport: ReportOut = {
       id: "report-auto-" + Math.random().toString(36).substring(7),
       title: `${isImg2 ? "Sasan" : "Vindhyachal"} CO2 Analysis Report`,
       dataset_name: filename,
@@ -645,7 +646,7 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
       const title = body.title || `CO2 Custom Report (${format.toUpperCase()})`;
       const estimatedCo2 = body.estimated_co2 || (isImg2 ? 3960 : 4760);
       
-      const newReport = {
+      const newReport: ReportOut = {
         id: "report-custom-" + Math.random().toString(36).substring(7),
         title: title,
         dataset_name: datasetName,
@@ -736,7 +737,7 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
         ...init?.headers,
       },
     });
-  } catch (err) {
+  } catch {
     networkFailed = true;
   }
 

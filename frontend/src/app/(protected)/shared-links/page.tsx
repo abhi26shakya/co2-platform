@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
@@ -27,25 +27,20 @@ interface SharedLinkItem {
   status: "active" | "disabled";
 }
 
-export default function SharedLinksPage() {
-  const [links, setLinks] = useState<SharedLinkItem[]>([]);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  function loadLinks() {
-    const raw = localStorage.getItem("emissia_shared_links_list");
-    if (raw) {
-      try {
-        setLinks(JSON.parse(raw));
-      } catch {
-        setLinks([]);
-      }
-    }
+function loadStoredLinks(): SharedLinkItem[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem("emissia_shared_links_list");
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
   }
+}
 
-  // Load links from localStorage
-  useEffect(() => {
-    loadLinks();
-  }, []);
+export default function SharedLinksPage() {
+  const [links, setLinks] = useState<SharedLinkItem[]>(loadStoredLinks);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const saveLinks = (updated: SharedLinkItem[]) => {
     setLinks(updated);

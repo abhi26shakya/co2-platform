@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useUser, useUpdateProfile, useLogout } from "@/features/auth/hooks/use-auth";
 import { useDashboard } from "@/features/dashboard/hooks/use-dashboard";
+import type { RecentUpload } from "@/types/dashboard";
 import { useReports } from "@/features/reports/hooks/use-reports";
 import { useSettings } from "@/providers/providers/settings-provider";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,17 @@ import {
   Code,
   ChevronRight,
 } from "lucide-react";
+
+function readLocal(key: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return localStorage.getItem(key) ?? fallback;
+}
+
+function readLocalBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : raw === "true";
+}
 
 // Toggle component matching existing dashboard design system
 function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
@@ -87,11 +99,18 @@ export default function SettingsPage() {
   // Profile Form States
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [org, setOrg] = useState("");
-  const [role, setRole] = useState("");
-  const [country, setCountry] = useState("");
-  const [bio, setBio] = useState("");
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [org, setOrg] = useState(() => readLocal("settings_profile_org", "Climate Policy Initiative"));
+  const [role, setRole] = useState(() => readLocal("settings_profile_role", "Lead Climate Researcher"));
+  const [country, setCountry] = useState(() => readLocal("settings_profile_country", "India"));
+  const [bio, setBio] = useState(() =>
+    readLocal(
+      "settings_profile_bio",
+      "Conducting space-based carbon analysis for industrial power plant emission compliance."
+    )
+  );
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : localStorage.getItem("settings_profile_avatar")
+  );
 
   // Password Update States
   const [currentPassword, setCurrentPassword] = useState("");
@@ -99,27 +118,28 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   // Account & Connected Accounts States
-  const [tfa, setTfa] = useState(false);
-  const [connectedGoogle, setConnectedGoogle] = useState(true);
-  const [connectedGithub, setConnectedGithub] = useState(false);
+  const [tfa, setTfa] = useState(() => readLocalBool("settings_security_2fa", false));
+  const [connectedGoogle, setConnectedGoogle] = useState(() => readLocalBool("settings_connected_google", true));
+  const [connectedGithub, setConnectedGithub] = useState(() => readLocalBool("settings_connected_github", false));
 
   // Notification States
-  const [notiPred, setNotiPred] = useState(true);
-  const [notiUpload, setNotiUpload] = useState(true);
-  const [notiReport, setNotiReport] = useState(false);
-  const [notiWeekly, setNotiWeekly] = useState(true);
-  const [notiAnnounce, setNotiAnnounce] = useState(false);
-  const [notiResearch, setNotiResearch] = useState(true);
-  const [notiEmail, setNotiEmail] = useState(true);
-  const [notiBrowser, setNotiBrowser] = useState(true);
+  const [notiPred, setNotiPred] = useState(() => readLocalBool("settings_noti_pred", true));
+  const [notiUpload, setNotiUpload] = useState(() => readLocalBool("settings_noti_upload", true));
+  const [notiReport, setNotiReport] = useState(() => readLocalBool("settings_noti_report", false));
+  const [notiWeekly, setNotiWeekly] = useState(() => readLocalBool("settings_noti_weekly", true));
+  const [notiAnnounce, setNotiAnnounce] = useState(() => readLocalBool("settings_noti_announce", false));
+  const [notiResearch, setNotiResearch] = useState(() => readLocalBool("settings_noti_research", true));
+  const [notiEmail, setNotiEmail] = useState(() => readLocalBool("settings_noti_email", true));
+  const [notiBrowser, setNotiBrowser] = useState(() => readLocalBool("settings_noti_browser", true));
 
-  // AI Preferences local states (so user clicks Save to apply)
-  const [localAiModel, setLocalAiModel] = useState("unet-v1");
-  const [localAiThreshold, setLocalAiThreshold] = useState(85);
-  const [localAiPalette, setLocalAiPalette] = useState("viridis");
-  const [localAiUnits, setLocalAiUnits] = useState("t/year");
-  const [localAiAutorun, setLocalAiAutorun] = useState(true);
-  const [localAiExplainable, setLocalAiExplainable] = useState(false);
+  // AI Preferences local states (so user clicks Save to apply) — seeded from the shared Settings
+  // Context, which is already available synchronously here.
+  const [localAiModel, setLocalAiModel] = useState(aiModel);
+  const [localAiThreshold, setLocalAiThreshold] = useState(aiThreshold);
+  const [localAiPalette, setLocalAiPalette] = useState(aiPalette);
+  const [localAiUnits, setLocalAiUnits] = useState(aiUnits);
+  const [localAiAutorun, setLocalAiAutorun] = useState(aiAutorun);
+  const [localAiExplainable, setLocalAiExplainable] = useState(aiExplainable);
 
   // Dirty tracking for unsaved change prompts
   const [isDirty, setIsDirty] = useState(false);
@@ -127,47 +147,28 @@ export default function SettingsPage() {
   // Delete Confirm Modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Initial Load of Saved Settings from LocalStorage & Context
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setOrg(localStorage.getItem("settings_profile_org") || "Climate Policy Initiative");
-      setRole(localStorage.getItem("settings_profile_role") || "Lead Climate Researcher");
-      setCountry(localStorage.getItem("settings_profile_country") || "India");
-      setBio(localStorage.getItem("settings_profile_bio") || "Conducting space-based carbon analysis for industrial power plant emission compliance.");
-      setAvatarPreview(localStorage.getItem("settings_profile_avatar") || null);
+  // Profile form fields mirror the async-loaded `user` object — adjusted during render (React's
+  // documented pattern for this) rather than in an effect, which would cause an extra render pass.
+  const [syncedUserId, setSyncedUserId] = useState(user?.id);
+  if (user && user.id !== syncedUserId) {
+    setSyncedUserId(user.id);
+    setFullName(user.full_name || "");
+    setEmail(user.email || "");
+  }
 
-      setTfa(localStorage.getItem("settings_security_2fa") === "true");
-      setConnectedGoogle(localStorage.getItem("settings_connected_google") !== "false");
-      setConnectedGithub(localStorage.getItem("settings_connected_github") === "true");
-
-      setNotiPred(localStorage.getItem("settings_noti_pred") !== "false");
-      setNotiUpload(localStorage.getItem("settings_noti_upload") !== "false");
-      setNotiReport(localStorage.getItem("settings_noti_report") === "true");
-      setNotiWeekly(localStorage.getItem("settings_noti_weekly") !== "false");
-      setNotiAnnounce(localStorage.getItem("settings_noti_announce") === "true");
-      setNotiResearch(localStorage.getItem("settings_noti_research") !== "false");
-      setNotiEmail(localStorage.getItem("settings_noti_email") !== "false");
-      setNotiBrowser(localStorage.getItem("settings_noti_browser") !== "false");
-    }
-  }, []);
-
-  // Initialize profile values from user model
-  useEffect(() => {
-    if (user) {
-      setFullName(user.full_name || "");
-      setEmail(user.email || "");
-    }
-  }, [user]);
-
-  // Sync AI local states with Context changes
-  useEffect(() => {
+  // Same pattern for the AI local drafts, which mirror the shared Settings Context until the user
+  // edits and saves them.
+  const aiContextSnapshot = JSON.stringify([aiModel, aiThreshold, aiPalette, aiUnits, aiAutorun, aiExplainable]);
+  const [syncedAiSnapshot, setSyncedAiSnapshot] = useState(aiContextSnapshot);
+  if (aiContextSnapshot !== syncedAiSnapshot) {
+    setSyncedAiSnapshot(aiContextSnapshot);
     setLocalAiModel(aiModel);
     setLocalAiThreshold(aiThreshold);
     setLocalAiPalette(aiPalette);
     setLocalAiUnits(aiUnits);
     setLocalAiAutorun(aiAutorun);
     setLocalAiExplainable(aiExplainable);
-  }, [aiModel, aiThreshold, aiPalette, aiUnits, aiAutorun, aiExplainable]);
+  }
 
   // Prompt user on unsaved changes
   useEffect(() => {
@@ -378,7 +379,8 @@ export default function SettingsPage() {
   };
 
   // Convert raw recent uploads size
-  const totalUploadedBytes = dashboardData?.recent_uploads.reduce((acc: number, u: any) => acc + u.size_bytes, 0) ?? 0;
+  const totalUploadedBytes =
+    dashboardData?.recent_uploads.reduce((acc: number, u: RecentUpload) => acc + u.size_bytes, 0) ?? 0;
   const storageMB = (totalUploadedBytes / (1024 * 1024)).toFixed(1);
 
   const tabs = [

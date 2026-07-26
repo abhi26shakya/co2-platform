@@ -15,18 +15,40 @@ interface GasConfig {
 
 export type MapMode = "2d" | "3d";
 
+/** Whatever was last clicked/selected on the map — a plant (PlantOut-shaped) or a synthetic gas
+ *  plume/hotspot entity (see the `entityMeta` shapes in emission-map.tsx / maplibre-map.tsx),
+ *  which don't share a single schema. All fields optional and no index signature, so concrete
+ *  shapes like EnrichedPlant/PlantOut remain structurally assignable here. */
+export interface SelectedFacility {
+  id?: string;
+  name?: string;
+  lat?: number;
+  lon?: number;
+  latitude?: number;
+  longitude?: number;
+  co2?: string | number;
+  co2_enhancement_ppm?: number | null;
+  confidence?: string;
+  satellite?: string;
+  dataset?: string;
+  industry?: string;
+  sector?: string;
+  company?: string;
+  country?: string;
+}
+
 interface MapStore {
   camera: CameraState;
   activeBasemap: string;
   mapMode: MapMode;
-  selectedFacility: any | null;
+  selectedFacility: SelectedFacility | null;
   gases: Record<string, GasConfig>;
 
   // Actions
   setCamera: (camera: Partial<CameraState>) => void;
   setActiveBasemap: (basemap: string) => void;
   setMapMode: (mode: MapMode) => void;
-  setSelectedFacility: (facility: any | null) => void;
+  setSelectedFacility: (facility: SelectedFacility | null) => void;
   toggleGas: (gas: string) => void;
   setGasOpacity: (gas: string, opacity: number) => void;
 }
@@ -66,7 +88,7 @@ const getSavedCamera = (): CameraState => {
       if (saved) {
         return JSON.parse(saved);
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -87,7 +109,7 @@ const getSavedGases = (): Record<string, GasConfig> => {
       if (saved) {
         return JSON.parse(saved);
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }

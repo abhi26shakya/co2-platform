@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Compass } from "lucide-react";
-import { useMapStore } from "@/features/maps/store/map-store";
+import { useMapStore, type SelectedFacility } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
 import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
@@ -31,7 +31,7 @@ interface Props {
   showHotspots: boolean;
   selectedMode?: string;
   activeBasemap?: string;
-  onSelectFacility?: (fac: any) => void;
+  onSelectFacility?: (fac: SelectedFacility) => void;
   drawingMode?: DrawingMode;
   comparisonMode?: boolean;
   showLayers?: ShowLayers;

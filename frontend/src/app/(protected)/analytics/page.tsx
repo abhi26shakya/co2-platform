@@ -3,6 +3,7 @@
 import { StatCard } from "@/features/dashboard/components/dashboard/stat-card";
 import { Card } from "@/components/ui/card";
 import { useAnalytics } from "@/features/maps/hooks/use-geo";
+import type { TimeseriesPoint, DistributionBucket } from "@/types/geo";
 import { tokens } from "@/lib/auth-tokens";
 import { Download, Share2 } from "lucide-react";
 import { useState } from "react";
@@ -66,7 +67,7 @@ export default function AnalyticsPage() {
     : { value: "—", unit: "t CO₂ / year" };
 
   // Map timeseries data points
-  const timeseriesData = data?.timeseries.map((item: any) => {
+  const timeseriesData = data?.timeseries.map((item: TimeseriesPoint) => {
     const formatted = formatEmission(item.avg_emission);
     return {
       ...item,
@@ -75,7 +76,7 @@ export default function AnalyticsPage() {
   });
 
   // Map distribution bins
-  const distributionData = data?.distribution.map((b: any) => {
+  const distributionData = data?.distribution.map((b: DistributionBucket) => {
     const formattedLo = formatEmission(b.lo);
     const loVal = parseFloat(formattedLo.value.replace(/,/g, ""));
     const label = loVal >= 1000 ? `${(loVal / 1000).toFixed(1)}k` : `${loVal}`;
@@ -201,7 +202,7 @@ export default function AnalyticsPage() {
             <Card className="p-5">
               <h2 className="text-sm font-medium">Images by source</h2>
               <ul className="mt-4 space-y-3">
-                {data?.sources.map((s: any) => (
+                {data?.sources.map((s: { source: string; count: number }) => (
                   <li key={s.source} className="flex items-baseline justify-between text-sm">
                     <span className="text-ground-400">{s.source}</span>
                     <span className="readout">{s.count}</span>
