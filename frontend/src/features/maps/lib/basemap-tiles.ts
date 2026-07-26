@@ -1,8 +1,6 @@
 /**
  * Raster tile URL templates shared by both map engines (Cesium 3D and MapLibre 2D) so basemap
- * selection looks visually consistent regardless of which engine is active. "terrain" has no
- * raster entry — it's a Cesium-only elevation provider (`Cesium.createWorldTerrain()`), not a
- * tile layer, so it isn't offered as a basemap option in 2D mode (see basemap-catalog.ts).
+ * selection looks visually consistent regardless of which engine is active.
  */
 export const BASEMAP_TILES: Record<string, string[]> = {
   dark: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
