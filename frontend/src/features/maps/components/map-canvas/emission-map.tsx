@@ -5,7 +5,7 @@ import { useMapStore } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { Compass } from "lucide-react";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
-import { BASEMAP_TILES } from "@/features/maps/lib/basemap-tiles";
+import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
 import { getGasColorHex, getGasPlumes, hexToRgb, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
 import {
   buildCircleResult,
@@ -58,6 +58,8 @@ export default function EmissionMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
+  const boundariesLayerRef = useRef<any>(null);
+  const roadsLayerRef = useRef<any>(null);
   const [cesiumReady, setCesiumReady] = useState(false);
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
@@ -108,6 +110,10 @@ export default function EmissionMap({
 
     viewer.scene.skyBox.show = false;
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#09090b");
+    // Bound mouse-wheel/touch zoom the same way the on-screen zoom buttons are bounded below —
+    // otherwise scroll-zooming out can send the camera into deep space with nothing in frame.
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 500;
+    viewer.scene.screenSpaceCameraController.maximumZoomDistance = 20_000_000;
 
     const storeCam = useMapStore.getState().camera;
     const targetHeight = (6378137 * Math.PI) / Math.pow(2, storeCam.zoom);
@@ -121,6 +127,12 @@ export default function EmissionMap({
     });
 
     viewerRef.current = viewer;
+
+    // Cesium only auto-resizes on the window's 'resize' event, not on the container's own size
+    // changing (side flyout opening/closing, or the container not having its final layout size
+    // yet on first paint) — without this the canvas can render at a stale size or blank.
+    const resizeObserver = new ResizeObserver(() => viewer.resize());
+    resizeObserver.observe(containerRef.current);
 
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((click: any) => {
@@ -163,6 +175,7 @@ export default function EmissionMap({
     });
 
     return () => {
+      resizeObserver.disconnect();
       handler.destroy();
       mouseHandler.destroy();
       if (viewerRef.current) {
@@ -199,7 +212,58 @@ export default function EmissionMap({
     } else {
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     }
-  }, [activeBasemap]);
+
+    // The base swap above calls removeAll(), which would silently drop the boundaries/roads
+    // overlays too — re-add them on top of the fresh base layer if their toggles are on.
+    boundariesLayerRef.current = null;
+    roadsLayerRef.current = null;
+    if (showLayers.boundaries) {
+      boundariesLayerRef.current = viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({ url: OVERLAY_TILES.boundaries })
+      );
+    }
+    if (showLayers.roads) {
+      roadsLayerRef.current = viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({ url: OVERLAY_TILES.roads })
+      );
+      roadsLayerRef.current.alpha = 0.35;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBasemap, cesiumReady]);
+
+  // Boundaries/roads overlay toggles — independent of basemap swaps above.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const Cesium = (window as any).Cesium;
+
+    if (boundariesLayerRef.current) {
+      viewer.imageryLayers.remove(boundariesLayerRef.current, true);
+      boundariesLayerRef.current = null;
+    }
+    if (showLayers.boundaries) {
+      boundariesLayerRef.current = viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({ url: OVERLAY_TILES.boundaries })
+      );
+    }
+  }, [showLayers.boundaries, cesiumReady]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const Cesium = (window as any).Cesium;
+
+    if (roadsLayerRef.current) {
+      viewer.imageryLayers.remove(roadsLayerRef.current, true);
+      roadsLayerRef.current = null;
+    }
+    if (showLayers.roads) {
+      roadsLayerRef.current = viewer.imageryLayers.addImageryProvider(
+        new Cesium.UrlTemplateImageryProvider({ url: OVERLAY_TILES.roads })
+      );
+      roadsLayerRef.current.alpha = 0.35;
+    }
+  }, [showLayers.roads, cesiumReady]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -256,6 +320,18 @@ export default function EmissionMap({
             outlineWidth: 2,
             heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           },
+          label: showLayers.prediction
+            ? {
+                text: `${p.name}\n${p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—"} ppm`,
+                font: "10px sans-serif",
+                fillColor: Cesium.Color.fromCssColorString("#e2e8f0"),
+                outlineColor: Cesium.Color.fromCssColorString("#09090b"),
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                pixelOffset: new Cesium.Cartesian2(0, -18),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              }
+            : undefined,
           properties: {
             metadata: {
               name: p.name,
@@ -423,6 +499,33 @@ export default function EmissionMap({
                 heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
               },
               properties: { metadata: entityMeta },
+            });
+          }
+
+          // "Isoline Contours" toggle is an always-on overlay independent of the selected render
+          // mode — skip when the mode is already "contours" to avoid drawing the same rings twice.
+          if (showLayers.contours && selectedMode !== "contours") {
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat, 10),
+              ellipse: {
+                semiMajorAxis: 8000.0,
+                semiMinorAxis: 8000.0,
+                material: Cesium.Color.TRANSPARENT,
+                outline: true,
+                outlineColor: finalColor.withAlpha(config.opacity * 0.95),
+                outlineWidth: 2.5,
+              },
+            });
+            viewer.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(plume.lon, plume.lat, 10),
+              ellipse: {
+                semiMajorAxis: 16000.0,
+                semiMinorAxis: 16000.0,
+                material: Cesium.Color.TRANSPARENT,
+                outline: true,
+                outlineColor: finalColor.withAlpha(config.opacity * 0.45),
+                outlineWidth: 1.5,
+              },
             });
           }
         });
@@ -646,18 +749,42 @@ export default function EmissionMap({
     };
   }, [drawingMode, clearTrigger, onDrawingComplete, onLiveMeasurement]);
 
+  // Cesium's camera.zoomIn/lookUp are unbounded relative moves — repeated clicks (or clicks after
+  // a tilt has already rotated the view) can walk the camera below the ground, off into space, or
+  // pointed at the horizon with nothing in frame. Clamp both height and pitch so the controls can
+  // never leave the camera in one of those dead states.
+  const MIN_CAMERA_HEIGHT_M = 500;
+  const MAX_CAMERA_HEIGHT_M = 20_000_000;
+  const MIN_PITCH_DEG = -89;
+  const MAX_PITCH_DEG = -10;
+
   const handleZoom = (zoomIn: boolean) => {
     const viewer = viewerRef.current;
     if (!viewer) return;
+    const Cesium = (window as any).Cesium;
+    // Deliberately not camera.zoomIn(): it translates along the view ray, which at anything
+    // other than a straight-down pitch drifts the camera sideways across the globe (and can even
+    // disturb the clamped pitch, since pitch is relative to local "down" at the camera's
+    // position). A pure radial move — same lat/lon, only height changes, orientation untouched —
+    // has no such side effects and is what "zoom" should mean regardless of current tilt.
+    const carto = viewer.camera.positionCartographic;
     const factor = zoomIn ? 0.6 : 1.6;
-    viewer.camera.zoomIn(viewer.camera.positionCartographic.height * (1 - factor));
+    const clampedHeight = Math.min(MAX_CAMERA_HEIGHT_M, Math.max(MIN_CAMERA_HEIGHT_M, carto.height * factor));
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, clampedHeight),
+      orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: viewer.camera.roll },
+    });
   };
 
   const handleTilt = (tiltUp: boolean) => {
     const viewer = viewerRef.current;
     if (!viewer) return;
     const Cesium = (window as any).Cesium;
-    viewer.camera.lookUp(Cesium.Math.toRadians(tiltUp ? 5 : -5));
+    const currentPitchDeg = Cesium.Math.toDegrees(viewer.camera.pitch);
+    const nextPitchDeg = Cesium.Math.clamp(currentPitchDeg + (tiltUp ? 5 : -5), MIN_PITCH_DEG, MAX_PITCH_DEG);
+    viewer.camera.setView({
+      orientation: { heading: viewer.camera.heading, pitch: Cesium.Math.toRadians(nextPitchDeg), roll: 0 },
+    });
   };
 
   const handleResetCamera = () => {
