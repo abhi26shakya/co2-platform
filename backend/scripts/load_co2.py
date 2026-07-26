@@ -38,7 +38,7 @@ NEW = {
 
 async def load() -> None:
     if not RESULTS_PATH.exists():
-        raise SystemExit(f"Not found: {RESULTS_PATH} - copy plant_results.json into backend/data/ first.")
+        raise SystemExit(f"Not found: {RESULTS_PATH} - copy plant_results.json into backend/data/")
 
     data = json.loads(RESULTS_PATH.read_text())
     async with async_session_maker() as session:
