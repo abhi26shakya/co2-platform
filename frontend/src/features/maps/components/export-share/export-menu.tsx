@@ -20,7 +20,7 @@ interface Props {
 
 export function ExportMenu({ activeFormat, progress, history, onExport }: Props) {
   return (
-    <Card className="p-5 bg-ground-900/20 border-ground-700/80 space-y-4">
+    <Card className="glass p-5 space-y-4">
       <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5 border-b border-ground-750 pb-2">
         <Download className="h-3.5 w-3.5" /> Export Data & Viewports
       </h3>

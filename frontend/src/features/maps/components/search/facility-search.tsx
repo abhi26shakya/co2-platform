@@ -17,7 +17,7 @@ export function FacilitySearch({ query, onQueryChange, results, onSelect }: Prop
 
   return (
     <div className="relative">
-      <Card className="p-3 bg-ground-900/40 border-ground-700/80">
+      <Card className="glass p-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ground-400" />
           <input
@@ -35,7 +35,7 @@ export function FacilitySearch({ query, onQueryChange, results, onSelect }: Prop
       </Card>
 
       {focused && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-ground-950 border border-ground-700 rounded-lg shadow-2xl z-20 overflow-hidden divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="glass-strong absolute top-full left-0 right-0 mt-1 rounded-lg z-20 overflow-hidden divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">
           {results.map((result) => (
             <button
               key={result.id}

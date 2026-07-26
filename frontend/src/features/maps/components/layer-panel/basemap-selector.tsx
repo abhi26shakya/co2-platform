@@ -13,7 +13,7 @@ export function BasemapSelector({ activeBasemap, mapMode, onSelect }: Props) {
   const basemaps = basemapsForMode(mapMode);
 
   return (
-    <Card className="p-4 bg-ground-900/40 border-ground-700/80 space-y-3">
+    <Card className="glass p-4 space-y-3">
       <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
         <Globe className="h-3.5 w-3.5" /> Basemaps
       </h3>

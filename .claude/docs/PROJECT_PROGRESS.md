@@ -45,11 +45,10 @@ Date: 2026-07-26
 
 # Current Focus
 
-- Map Section redesign, Milestone 3 (GIS tools/export hardening) complete
-  — see M-006. Real backend-integrated export was explicitly deferred: the
-  backend's `/reports` endpoint is an account-wide summary feature with no
-  viewport/gas/basemap parameters, a separate concern from the map's
-  client-side export panel.
+- Map Section redesign, Milestone 4 (glassmorphism visual pass) complete —
+  see M-007. Visual-only, no behavior changes. Next up (user chose to do
+  both): a real backend-integrated viewport export endpoint, deferred
+  twice now (see M-006).
 - Frontend CI now runs `npm run test` (Vitest) alongside lint/typecheck/build.
 
 ---
@@ -179,6 +178,46 @@ reflects actual camera position and `mode`; QR image only loads after the
 explicit click; export menu shows "Simulated" only on GeoTIFF/PDF;
 re-verified 2D/3D toggle still works with no regression — no new console
 errors.
+
+### M-007 — Map Section redesign, Milestone 4: glassmorphism visual pass (this session)
+
+Visual-only pass applying the site's existing theme-aware glass system
+(`.glass`/`.glass-strong` in `globals.css`, already used on the homepage
+and app shell) to the map feature's UI chrome, replacing ad hoc
+`bg-ground-900/NN border-ground-700/NN` surface treatments. No behavior,
+state, or test changes.
+
+- Side rail + flyout panels (search, layers, gas, GIS tools, export) →
+  `.glass`.
+- Floating canvas overlays (compass, mouse-coordinate readout, camera
+  controls, 2D/3D mode toggle, layer-toggle overlay, intensity legend) →
+  `.glass-strong` for legibility over busy map imagery.
+- Facility-inspector drawer and share dialog (modal-like) → `.glass-strong`;
+  timeline bar and comparison panel → `.glass`.
+- Deliberately left untouched: alert-severity colors in `alerts-badge.tsx`,
+  the collapsed alerts pill's red border, and the fullscreen-error notice's
+  red border — these are semantic status colors, not generic chrome, same
+  category as the plume-gradient exclusion already documented in
+  `CLAUDE.md`.
+
+Typecheck/lint/test/build all clean (83/83 tests, no new lint debt).
+Manually verified both themes (light and dark, toggled via
+Settings → Appearance) and both map modes render the glass surfaces
+correctly with good contrast — confirmed light mode looks like an
+intentionally designed second theme, not an inverted dark mode.
+
+Two pre-existing issues (not introduced by this visual-only pass) were
+found during manual verification. The MapLibre one was fixed as a small
+follow-up in this same branch: `gas-heatmap`'s `heatmap-opacity` paint
+property was set to a per-feature data expression (`["get", "opacity"]`),
+which MapLibre's style spec doesn't support for that property (unlike
+`heatmap-weight`/`heatmap-radius`, which do allow data-driven expressions)
+— it threw a console error and the 2D heatmap mode's opacity was
+effectively unstyled. Fixed by folding each gas layer's opacity into
+`heatmap-weight` instead (`["*", ["get", "intensity"], ["get", "opacity"]]`)
+and giving `heatmap-opacity` a constant value. The second issue, a
+pre-existing root-layout theme hydration warning already noted in earlier
+sessions, remains out of scope here.
 
 Deferred: real backend-integrated viewport export, glassmorphism visual
 pass.

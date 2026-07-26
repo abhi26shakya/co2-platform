@@ -693,11 +693,11 @@ export default function EmissionMap({
 
       {cesiumReady && (
         <>
-          <div className="absolute top-4 left-4 bg-ground-900/90 border border-ground-700/80 rounded-xl p-2.5 flex items-center justify-center shadow-2xl z-10 select-none">
+          <div className="glass-strong absolute top-4 left-4 rounded-xl p-2.5 flex items-center justify-center z-10 select-none">
             <Compass className="h-7 w-7 text-sensor transition-transform duration-100" style={{ transform: `rotate(${-camera.bearing}deg)` }} />
           </div>
 
-          <div className="absolute bottom-4 left-4 bg-ground-900/95 border border-ground-700/80 rounded-lg px-3 py-1.5 text-[10px] font-mono text-instrument shadow-lg z-10 select-none">
+          <div className="glass-strong absolute bottom-4 left-4 rounded-lg px-3 py-1.5 text-[10px] font-mono text-instrument z-10 select-none">
             {mouseCoords ? (
               <span>
                 LAT: {mouseCoords.lat.toFixed(4)}° &middot; LON: {mouseCoords.lon.toFixed(4)}°

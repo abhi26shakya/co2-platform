@@ -27,7 +27,7 @@ interface Props {
 /** Compact floating overlay on the map canvas — kept minimal per the map-first layout, not a full Card. */
 export function LayerToggleOverlay({ showLayers, onChange }: Props) {
   return (
-    <div className="absolute top-4 right-4 bg-ground-950/95 border border-ground-700/80 rounded-xl p-3.5 space-y-3 z-10 w-44 shadow-2xl">
+    <div className="glass-strong absolute top-4 right-4 rounded-xl p-3.5 space-y-3 z-10 w-44">
       <h4 className="text-[10px] uppercase font-bold text-ground-400 tracking-wider flex items-center gap-1.5 border-b border-ground-800 pb-1.5">
         <Layers className="h-3 w-3" /> Toggle Layers
       </h4>

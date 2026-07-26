@@ -35,7 +35,7 @@ import { ModeToggle } from "@/features/maps/components/map-controls/mode-toggle"
 const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/emission-map"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[40rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
+    <div className="glass flex h-[40rem] items-center justify-center rounded-xl text-sm text-ground-400">
       Loading Cesium 3D Globe...
     </div>
   ),
@@ -44,7 +44,7 @@ const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/
 const MapLibreMap = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[40rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
+    <div className="glass flex h-[40rem] items-center justify-center rounded-xl text-sm text-ground-400">
       Loading 2D map…
     </div>
   ),
@@ -210,7 +210,7 @@ export default function MapPage() {
       {/* Primary workspace: collapsible icon rail + flyout panel + full-bleed map */}
       <div className="flex items-start gap-3">
         {/* Icon rail */}
-        <div className="flex flex-col gap-1.5 bg-ground-900/60 border border-ground-700/80 rounded-xl p-1.5 shrink-0">
+        <div className="glass flex flex-col gap-1.5 rounded-xl p-1.5 shrink-0">
           {RAIL_ITEMS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}

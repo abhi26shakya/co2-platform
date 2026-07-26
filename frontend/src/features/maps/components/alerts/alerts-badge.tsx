@@ -77,7 +77,7 @@ export function AlertsBadge({ open, onToggle, onSelectAlert }: Props) {
       </button>
 
       {open && (
-        <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-80 bg-ground-950/95 border border-ground-700/80 rounded-xl p-3 space-y-2 shadow-2xl max-h-72 overflow-y-auto">
+        <div className="glass-strong absolute top-full mt-2 left-1/2 -translate-x-1/2 w-80 rounded-xl p-3 space-y-2 max-h-72 overflow-y-auto">
           {REALTIME_ALERTS.map((alertItem) => (
             <button
               key={alertItem.id}
