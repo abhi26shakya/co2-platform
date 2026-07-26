@@ -5,6 +5,7 @@ function resetStore() {
   useMapStore.setState({
     camera: { lat: 24.0, lon: 80.0, zoom: 5.0, pitch: -45.0, bearing: 0.0 },
     activeBasemap: "dark",
+    mapMode: "3d",
     selectedFacility: null,
     gases: {
       co2: { enabled: true, opacity: 0.8 },
@@ -67,6 +68,22 @@ describe("setActiveBasemap", () => {
   });
 });
 
+describe("setMapMode", () => {
+  it("updates the map mode", () => {
+    useMapStore.getState().setMapMode("2d");
+    expect(useMapStore.getState().mapMode).toBe("2d");
+  });
+
+  it("persists the map mode choice to localStorage", () => {
+    useMapStore.getState().setMapMode("2d");
+    expect(localStorage.getItem("emissia-map-mode")).toBe("2d");
+  });
+
+  it("defaults to 3d when nothing is saved", () => {
+    expect(useMapStore.getState().mapMode).toBe("3d");
+  });
+});
+
 describe("setSelectedFacility", () => {
   it("stores the selected facility", () => {
     const facility = { id: "plant-1", name: "Vindhyachal" };
@@ -125,6 +142,7 @@ describe("module initialization from localStorage", () => {
       JSON.stringify({ lat: 1, lon: 2, zoom: 3, pitch: 4, bearing: 5 })
     );
     localStorage.setItem("emissia-active-basemap", "satellite");
+    localStorage.setItem("emissia-map-mode", "2d");
     localStorage.setItem(
       "emissia-gas-layers",
       JSON.stringify({
@@ -142,6 +160,7 @@ describe("module initialization from localStorage", () => {
 
     expect(state.camera).toEqual({ lat: 1, lon: 2, zoom: 3, pitch: 4, bearing: 5 });
     expect(state.activeBasemap).toBe("satellite");
+    expect(state.mapMode).toBe("2d");
     expect(state.gases.ch4.enabled).toBe(true);
   });
 });

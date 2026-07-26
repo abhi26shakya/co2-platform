@@ -1,0 +1,15 @@
+/**
+ * Raster tile URL templates shared by both map engines (Cesium 3D and MapLibre 2D) so basemap
+ * selection looks visually consistent regardless of which engine is active. "terrain" has no
+ * raster entry — it's a Cesium-only elevation provider (`Cesium.createWorldTerrain()`), not a
+ * tile layer, so it isn't offered as a basemap option in 2D mode (see basemap-catalog.ts).
+ */
+export const BASEMAP_TILES: Record<string, string[]> = {
+  dark: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+  satellite: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+  hybrid: [
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
+  ],
+  osm: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+};

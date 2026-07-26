@@ -13,15 +13,19 @@ interface GasConfig {
   opacity: number;
 }
 
+export type MapMode = "2d" | "3d";
+
 interface MapStore {
   camera: CameraState;
   activeBasemap: string;
+  mapMode: MapMode;
   selectedFacility: any | null;
   gases: Record<string, GasConfig>;
-  
+
   // Actions
   setCamera: (camera: Partial<CameraState>) => void;
   setActiveBasemap: (basemap: string) => void;
+  setMapMode: (mode: MapMode) => void;
   setSelectedFacility: (facility: any | null) => void;
   toggleGas: (gas: string) => void;
   setGasOpacity: (gas: string, opacity: number) => void;
@@ -38,12 +42,21 @@ const DEFAULT_CAMERA = {
 const STORAGE_KEY_BASEMAP = "emissia-active-basemap";
 const STORAGE_KEY_CAMERA = "emissia-camera-position";
 const STORAGE_KEY_GASES = "emissia-gas-layers";
+const STORAGE_KEY_MAP_MODE = "emissia-map-mode";
 
 const getSavedBasemap = (): string => {
   if (typeof window !== "undefined") {
     return localStorage.getItem(STORAGE_KEY_BASEMAP) || "dark";
   }
   return "dark";
+};
+
+const getSavedMapMode = (): MapMode => {
+  if (typeof window !== "undefined") {
+    const saved = localStorage.getItem(STORAGE_KEY_MAP_MODE);
+    if (saved === "2d" || saved === "3d") return saved;
+  }
+  return "3d";
 };
 
 const getSavedCamera = (): CameraState => {
@@ -84,6 +97,7 @@ const getSavedGases = (): Record<string, GasConfig> => {
 export const useMapStore = create<MapStore>((set) => ({
   camera: getSavedCamera(),
   activeBasemap: getSavedBasemap(),
+  mapMode: getSavedMapMode(),
   selectedFacility: null,
   gases: getSavedGases(),
 
@@ -101,6 +115,13 @@ export const useMapStore = create<MapStore>((set) => ({
       localStorage.setItem(STORAGE_KEY_BASEMAP, basemap);
     }
     set({ activeBasemap: basemap });
+  },
+
+  setMapMode: (mode) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY_MAP_MODE, mode);
+    }
+    set({ mapMode: mode });
   },
 
   setSelectedFacility: (facility) => set({ selectedFacility: facility }),

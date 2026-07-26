@@ -1,25 +1,24 @@
 import { Card } from "@/components/ui/card";
 import { Eye } from "lucide-react";
-
-const MODES = [
-  { id: "volume3d", label: "3D Extruded Columns" },
-  { id: "heatmap", label: "Plume Heatmap" },
-  { id: "contours", label: "Contours (Isolines)" },
-];
+import { visualizationModesForMode } from "@/features/maps/lib/visualization-mode-catalog";
+import type { MapMode } from "@/features/maps/store/map-store";
 
 interface Props {
   selectedMode: string;
+  mapMode: MapMode;
   onSelect: (id: string) => void;
 }
 
-export function VisualizationModeSelector({ selectedMode, onSelect }: Props) {
+export function VisualizationModeSelector({ selectedMode, mapMode, onSelect }: Props) {
+  const modes = visualizationModesForMode(mapMode);
+
   return (
     <Card className="p-4 bg-ground-900/40 border-ground-700/80 space-y-3">
       <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
         <Eye className="h-3.5 w-3.5" /> Render Modes
       </h3>
       <div className="grid grid-cols-1 gap-1 text-xs">
-        {MODES.map((mode) => (
+        {modes.map((mode) => (
           <button
             key={mode.id}
             onClick={() => onSelect(mode.id)}
