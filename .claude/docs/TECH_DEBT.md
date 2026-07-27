@@ -309,11 +309,68 @@ Maintain unresolved debt items here.
 
 Items requiring immediate action.
 
+See KNOWN_ISSUES.md KI-005 (Reports management UI writes fields the
+backend doesn't have) and KI-006 (`frontend/Dockerfile` is dev-mode only)
+— both discovered 2026-07-27, full functionality audit
+(`AUDIT_REPORT.md`).
+
 ---
 
 # High Priority Debt
 
 Items affecting development speed, security, or reliability.
+
+## Debt Item: Dead-code duplicate of the entire auth-dependency stack (backend)
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: `backend/app/api/deps.py` (defines
+`get_current_user`/`CurrentUser` using `app/repositories/user.py`,
+singular) and `app/repositories/refresh_token.py` (singular) are never
+imported anywhere in `app/` or `tests/` — confirmed via grep. Every real
+router imports the parallel, actually-used `app/core/deps.py` +
+`app/repositories/users.py`/`refresh_tokens.py` (plural) instead. The
+dead versions have near-identical logic to the live ones but subtly
+different signatures (`create()` takes `expires_at` in the dead version
+vs `ttl_days` in the live one).
+**Impact**: ~130 lines of dead code that's a real trap for anyone who
+greps `UserRepository` and edits the wrong file, believing they've fixed
+something.
+**Estimated Effort**: Small (delete the dead files, confirm nothing
+imports them, run tests).
+**Priority**: High.
+
+## Debt Item: Weak default JWT secret with no startup guard
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: `backend/app/core/config.py:24` defaults
+`jwt_secret_key` to the literal string `"change-me-in-production"`, and
+nothing checks at startup whether it was actually overridden.
+**Impact**: Not exploitable today (no backend is currently deployed
+behind the live Vercel frontend), but a live footgun the moment one is —
+tokens would be forgeable with a publicly-known default.
+**Estimated Effort**: Small (raise/refuse to boot if the default is
+still set outside an explicit dev-mode flag).
+**Priority**: High.
+
+## Debt Item: No CI dependency/image security scanning
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: `.github/workflows/ci.yml` runs tests only — no
+`pip-audit`, `npm audit`, Dependabot config, or image-scan step (e.g.
+Trivy) exists anywhere in the repo.
+**Impact**: Known-vulnerable dependencies could ship undetected.
+**Estimated Effort**: Small–Medium.
+**Priority**: High.
+
+## Debt Item: No CD / deployment automation
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: CI has three test-only jobs (backend/ml-service/
+frontend); no build-and-push-image job, no deploy job for backend/
+ml-service (frontend deploys via Vercel, separately from this repo's CI).
+**Impact**: Backend/ml-service deployment stays manual and unrepeatable.
+**Estimated Effort**: Medium (depends on choosing a target host).
+**Priority**: High.
 
 ---
 
@@ -321,11 +378,54 @@ Items affecting development speed, security, or reliability.
 
 Items requiring planned improvement.
 
+## Debt Item: Redis container present in `docker-compose.yml` but never wired to the backend
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: `docker-compose.yml`'s `full` profile runs a `redis`
+service, but the `backend` service's `environment:` block never sets
+`CO2_REDIS_URL`, so `rate_limit_storage` silently stays `memory://`
+(the `config.py` default) even under the "full" profile. The container
+runs but nothing points at it.
+**Impact**: Rate limits don't actually hold across workers even in the
+profile meant to demonstrate prod-like behavior; contradicts the
+documented intent (see main CLAUDE.md's "Redis-backed rate limits in
+compose" backlog item — this shows the container exists but the wiring
+was never finished).
+**Estimated Effort**: Small (set the env var, verify with `docker compose
+--profile full up`).
+**Priority**: Medium.
+
+## Debt Item: All three Dockerfiles run as root; no coverage gate in CI; no observability/error-tracking
+
+**Discovered**: 2026-07-27, full functionality audit.
+**Description**: No Dockerfile (backend/ml-service/frontend) sets a
+non-root `USER`. `pytest`/`npm run test` in CI only assert "tests pass" —
+no `--cov` flag or minimum coverage threshold anywhere. No Sentry (or
+equivalent) integration; only basic `/health` endpoints exist, no
+structured logging/APM.
+**Impact**: Standard hardening/observability gaps, not urgent individually
+but compound as the app moves toward real deployment.
+**Estimated Effort**: Small (non-root users) to Medium (observability).
+**Priority**: Medium.
+
 ---
 
 # Low Priority Debt
 
 Minor improvements.
+
+## Debt Item: Miscellaneous small findings from the 2026-07-27 audit
+
+- `backend/requirements.txt` lists `reportlab`, `matplotlib`, `slowapi`
+  each twice (harmless, pip dedupes, signals unreviewed diffs).
+- Thin/no direct test coverage on `GET /api/v1/models`, `dashboard.py`,
+  `health.py`.
+- No `LICENSE` file at repo root.
+- Several `.claude/docs/` files are still unfilled templates:
+  `ROADMAP.md`, `RISK_REGISTER.md`, `API_REFERENCE.md`, `DATABASE.md`,
+  `DEPLOYMENT.md`.
+
+**Priority**: Low.
 
 ---
 
