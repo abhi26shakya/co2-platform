@@ -63,9 +63,31 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_address: str = "no-reply@emissia.dev"
 
+    # OCO-3/GEE satellite data pipeline (Track A - see docs/ml-integration.md
+    # and backend/app/services/oco3_analysis.py). Same credential shape as
+    # ml-service's CO2ML_GEE_*/CO2ML_NASA_* - this batch job runs in
+    # backend, not ml-service, since it writes to backend-owned Plant rows.
+    gee_service_account_email: str | None = None
+    gee_service_account_key_path: str | None = None
+    gee_project_id: str | None = None
+    nasa_earthdata_username: str | None = None
+    nasa_earthdata_password: str | None = None
+
     @property
     def google_oauth_configured(self) -> bool:
         return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
+
+    @property
+    def gee_configured(self) -> bool:
+        return bool(
+            self.gee_service_account_email
+            and self.gee_service_account_key_path
+            and self.gee_project_id
+        )
+
+    @property
+    def nasa_earthdata_configured(self) -> bool:
+        return bool(self.nasa_earthdata_username and self.nasa_earthdata_password)
 
     @model_validator(mode="after")
     def _guard_default_jwt_secret(self) -> "Settings":

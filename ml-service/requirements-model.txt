@@ -1,5 +1,7 @@
-# Uncomment when integrating the real model:
-# torch
-# rasterio
-# numpy
-# pillow
+# Training-only extras (ml-service/training/, never imported by the served
+# app). Install into a separate venv when actually running a training run -
+# not part of the Docker image, not needed to serve /predict.
+#
+#   pip install -r requirements.txt -r requirements-model.txt
+#
+pandas==2.2.3

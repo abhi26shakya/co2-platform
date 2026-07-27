@@ -26,3 +26,11 @@ backend/storage/
 # Local env files
 .env.local
 frontend/.env.local
+
+# Credentials (GEE service account key, etc.) - see docs/credentials-setup.md
+secrets/*
+!secrets/*.example
+
+# Trained model weights (data artifact, not code) - see ml-service/weights/README.md
+ml-service/weights/*.pt
+ml-service/data/

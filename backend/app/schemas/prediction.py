@@ -3,6 +3,8 @@
 This is THE integration boundary. The real model must return this exact shape.
 If the model's output grows richer, add PredictionResultV2 - never mutate V1.
 """
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -26,6 +28,42 @@ class PredictionResultV1(BaseModel):
     schema_version: str = "v1"
     co2_emission_tonnes_per_year: float
     confidence: float = Field(ge=0.0, le=100.0)
+    hotspots: list[Hotspot]
+    heatmap_url: str | None = None
+    model_version: str
+    inference_time_ms: float
+
+
+class PredictionResultV2(BaseModel):
+    """Real-model contract (see docs/ml-integration.md's "Real ML Model +
+    Satellite Data Integration" plan): combines a live NO2/SO2 CNN
+    detection (Track B) with a nearest-plant OCO-3 mass-balance estimate
+    (Track A, backend/app/services/emissions_conversion.py) where available.
+
+    `data_source` says how `co2_emission_tonnes_per_year` was derived -
+    never present it without checking this field:
+      - "oco3_estimated": a formula-derived estimate from a real OCO-3 XCO2
+        enhancement measurement near the request's bounds. Always paired
+        with co2_estimate_low/high - present as a range, not a bare point
+        value; this is an estimate under stated assumptions, not a
+        calibrated measurement (see emissions_conversion.py's docstring).
+      - "cnn_proxy": no OCO-3 data available nearby; only the CNN's
+        detection_confidence is meaningful. co2_emission_tonnes_per_year
+        and the estimate range are null - do not fabricate a tonnes figure
+        from detection confidence alone.
+      - "unavailable": neither track produced a usable result (e.g.
+        credentials not configured, or no signal at all).
+    """
+
+    schema_version: str = "v2"
+    data_source: Literal["oco3_estimated", "cnn_proxy", "unavailable"]
+    detection_confidence: float = Field(
+        ge=0.0, le=100.0, description="CNN P(power-plant-like combustion source) x 100"
+    )
+    co2_emission_tonnes_per_year: float | None = None
+    co2_estimate_low: float | None = None
+    co2_estimate_high: float | None = None
+    co2_ppm_enhancement: float | None = None
     hotspots: list[Hotspot]
     heatmap_url: str | None = None
     model_version: str

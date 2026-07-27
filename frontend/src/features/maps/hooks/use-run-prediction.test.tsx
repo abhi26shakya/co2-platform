@@ -27,6 +27,11 @@ describe("useRunPrediction", () => {
       hotspots: [],
       inference_time_ms: 320,
       created_at: new Date().toISOString(),
+      data_source: null,
+      detection_confidence: null,
+      co2_ppm_enhancement: null,
+      co2_estimate_low: null,
+      co2_estimate_high: null,
       model_version: "v1.2.0",
       image_filename: "vindhyachal.tif",
     };

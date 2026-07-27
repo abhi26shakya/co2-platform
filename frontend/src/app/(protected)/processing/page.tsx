@@ -246,6 +246,14 @@ export default function ProcessingPage() {
   // Rendering Success State
   if (simulatedComplete && runPrediction.isSuccess) {
     const result = runPrediction.data;
+    // v2 predictions (data_source set) may have no emissions figure at all -
+    // only "oco3_estimated" carries one; "cnn_proxy"/"unavailable" mean a
+    // combustion source may have been detected but without a direct CO2
+    // measurement for this location. v1 results (data_source null, from the
+    // mock predictor) keep their original always-present-number display.
+    const isV2 = result?.data_source != null;
+    const hasEmissionFigure = !isV2 || result?.data_source === "oco3_estimated";
+    const displayConfidence = isV2 ? result?.detection_confidence : result?.confidence;
     return (
       <div className="mx-auto max-w-2xl text-center py-16 space-y-8 animate-in fade-in-50">
         <div className="mx-auto h-16 w-16 rounded-full bg-sensor/10 flex items-center justify-center border border-sensor/20 text-sensor animate-pulse">
@@ -262,16 +270,43 @@ export default function ProcessingPage() {
 
         <Card className="divide-y divide-ground-700/60 border border-ground-700 bg-ground-900/40 max-w-md mx-auto overflow-hidden">
           <div className="p-4 bg-ground-900/60">
-            <p className="text-xs text-ground-400 uppercase tracking-wider font-semibold">Prediction readout</p>
-            <p className="readout text-3xl font-bold text-sensor mt-1">
-              {result?.co2_emission_tonnes_per_year?.toLocaleString() ?? "—"}{" "}
-              <span className="text-sm font-medium text-ground-400">t CO₂/yr</span>
-            </p>
+            <div className="flex items-center justify-center gap-2">
+              <p className="text-xs text-ground-400 uppercase tracking-wider font-semibold">Prediction readout</p>
+              {isV2 && (
+                <span
+                  className={cn(
+                    "text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full border",
+                    result?.data_source === "oco3_estimated"
+                      ? "border-sensor/30 text-sensor bg-sensor/5"
+                      : "border-ground-700 text-ground-400 bg-ground-800"
+                  )}
+                >
+                  {result?.data_source === "oco3_estimated" ? "OCO-3 estimate" : "AI-detected, unconfirmed"}
+                </span>
+              )}
+            </div>
+            {hasEmissionFigure ? (
+              <p className="readout text-3xl font-bold text-sensor mt-1">
+                {result?.co2_emission_tonnes_per_year?.toLocaleString() ?? "—"}{" "}
+                <span className="text-sm font-medium text-ground-400">t CO₂/yr</span>
+              </p>
+            ) : (
+              <p className="text-sm text-ground-400 mt-2 max-w-xs mx-auto">
+                {result?.data_source === "cnn_proxy"
+                  ? "A combustion source was detected, but no direct CO₂ measurement is available for this location."
+                  : "No detection or measurement available for this location."}
+              </p>
+            )}
+            {isV2 && result?.data_source === "oco3_estimated" && result?.co2_estimate_low != null && (
+              <p className="text-[11px] text-ground-400 mt-1">
+                range: {result.co2_estimate_low.toLocaleString()}–{result.co2_estimate_high?.toLocaleString()} t/yr
+              </p>
+            )}
           </div>
           <div className="p-4 grid grid-cols-2 gap-4 text-xs text-left">
             <div>
-              <span className="text-ground-400 block">Confidence Score:</span>
-              <span className="font-mono text-instrument font-semibold">{result?.confidence ?? 0}%</span>
+              <span className="text-ground-400 block">{isV2 ? "Detection Confidence:" : "Confidence Score:"}</span>
+              <span className="font-mono text-instrument font-semibold">{displayConfidence ?? 0}%</span>
             </div>
             <div>
               <span className="text-ground-400 block">Hotspots Detected:</span>
