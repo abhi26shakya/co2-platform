@@ -1,7 +1,10 @@
 """Application configuration loaded from environment variables (prefix: CO2_)."""
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "change-me-in-production"
 
 
 class Settings(BaseSettings):
@@ -10,6 +13,11 @@ class Settings(BaseSettings):
     app_name: str = "CO2 Emissions Platform API"
     api_v1_prefix: str = "/api/v1"
     debug: bool = False
+
+    # Defaults to "production" so any deployment that forgets to set this
+    # explicitly is treated as production and gets the jwt_secret_key
+    # guard below. Local dev sets CO2_ENVIRONMENT=development in .env.example.
+    environment: str = "production"
 
     database_url: str = "postgresql+asyncpg://co2:co2password@localhost:5432/co2_platform"
 
@@ -26,7 +34,7 @@ class Settings(BaseSettings):
     storage_local_path: str = "./storage"
 
     # Auth (wired fully in the auth stage)
-    jwt_secret_key: str = "change-me-in-production"
+    jwt_secret_key: str = DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 14
@@ -38,6 +46,16 @@ class Settings(BaseSettings):
     auth_rate_limit: str = "30/minute"
     rate_limit_storage: str = "memory://"
     redis_url: str | None = None
+
+    @model_validator(mode="after")
+    def _guard_default_jwt_secret(self) -> "Settings":
+        if self.environment != "development" and self.jwt_secret_key == DEFAULT_JWT_SECRET:
+            raise ValueError(
+                "CO2_JWT_SECRET_KEY is still the insecure default "
+                f"({DEFAULT_JWT_SECRET!r}). Set a real secret via CO2_JWT_SECRET_KEY, "
+                "or set CO2_ENVIRONMENT=development for local development."
+            )
+        return self
 
 
 @lru_cache

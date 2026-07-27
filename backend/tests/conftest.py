@@ -14,6 +14,7 @@ os.environ.setdefault(
     "CO2_TEST_DATABASE_URL",
     "postgresql+asyncpg://co2:co2password@localhost:5432/co2_test",
 )
+os.environ.setdefault("CO2_ENVIRONMENT", "development")
 os.environ["CO2_STORAGE_LOCAL_PATH"] = tempfile.mkdtemp(prefix="co2-test-storage-")
 os.environ["CO2_RATE_LIMIT_ENABLED"] = "0"  # hardening tests re-enable per-test
 os.environ["CO2_AUTH_RATE_LIMIT"] = "5/minute"  # tight limit so tests can trigger it fast

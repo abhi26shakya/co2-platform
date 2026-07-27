@@ -245,6 +245,61 @@ Maintain current unresolved issues here.
 
 Issues requiring immediate attention.
 
+## KI-005 — Reports management UI (frontend) writes fields the backend doesn't have
+
+**Classification**: Bug (deeper instance of the already-documented `ReportOut`
+type mismatch in TECH_DEBT.md)
+**Discovered**: 2026-07-27, full functionality audit (`AUDIT_REPORT.md`).
+**Description**: `frontend/src/app/(protected)/reports/page.tsx`
+(`createReport.mutate`/`updateReport.mutate` calls at lines 129, 160, 185,
+205, 222, 229, 239, 251, 275) sends ~15 fields the real backend schema
+doesn't have — `dataset_name`, `satellite_source`, `confidence_score`,
+`estimated_co2`, `detected_facilities`, `comments`, `versions`,
+`is_favorite`, `is_archived`, `shares_count`. The real backend `ReportOut`
+only has `id, title, format, params, created_at, url`
+(`backend/app/schemas/report.py`). So favorites, comments, threaded
+replies, version history/restore, and archive are UI-only illusions —
+they silently no-op or 422 against the real API. Additionally: the
+Custom Report Builder's progress bar (`reports/page.tsx:105-147`) is a
+fully simulated `setInterval` animation with hardcoded
+`confidence_score`/`estimated_co2` values keyed off matching a filename
+(`sasan.tif`), and `generateShareLink` (`reports/page.tsx:270`) builds a
+hardcoded fake URL rather than calling any real share-link API.
+**Impact**: The entire reports *management* surface (not just some
+display fields, per the original `ReportOut` tech-debt note) is
+non-functional against a real backend. Highest-impact gap found in the
+2026-07-27 audit.
+**Workaround**: None.
+**Proposed Solution**: Either extend the backend report model/schema to
+genuinely support favorites/comments/versions/sharing, or strip the
+frontend UI down to what the real API supports.
+**Priority**: Critical.
+**Related**: TECH_DEBT.md's existing `ReportOut` mismatch entry (which
+covers display-only fields); this issue covers write/mutation paths.
+
+---
+
+## KI-006 — `frontend/Dockerfile` builds a dev-mode image, not production
+
+**Classification**: Bug / Infrastructure
+**Discovered**: 2026-07-27, full functionality audit (`AUDIT_REPORT.md`).
+**Description**: `frontend/Dockerfile:11` runs `CMD ["npm", "run", "dev"]`
+— the Next.js dev server — instead of a production build. No multi-stage
+build exists; the image `COPY . .`s the entire repo into the runner stage
+rather than only build output.
+**Impact**: This image cannot serve production traffic as-is. Not
+currently blocking (the live frontend deploys via Vercel, not this
+Dockerfile), but blocks any container-based deploy path (e.g.
+`docker compose --profile full up --build` in a prod-like context) and is
+misleading to anyone assuming the Dockerfile is deploy-ready.
+**Workaround**: None — use the Vercel deployment path.
+**Proposed Solution**: Rewrite as a real multi-stage build (`next build`
+→ `next start`), add a non-root `USER`, and a `.dockerignore` to avoid
+`COPY . .` pulling in the whole repo.
+**Priority**: Critical.
+
+---
+
 ## KI-004 — 3D map mode (Cesium) crashes the browser tab on the deployed Vercel build
 
 **Classification**: Bug
