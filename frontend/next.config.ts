@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
+// No BACKEND_URL configured (e.g. this deployment has no live backend behind
+// it) -> the app runs entirely against api-client.ts's mock fallback. Baked
+// in at build time so the client bundle knows this without a runtime check.
+const hasBackend = Boolean(process.env.BACKEND_URL);
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_MOCK_MODE: hasBackend ? "false" : "true",
+  },
   async rewrites() {
     // Proxies /api/v1/* to the FastAPI backend.
     // IMPORTANT: rewrite destinations are baked into the build manifest at
