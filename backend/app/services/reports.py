@@ -30,6 +30,7 @@ from app.models import Report, User
 from app.repositories.predictions import PredictionRepository
 from app.schemas.geo import AnalyticsOut
 from app.services.analytics import AnalyticsService
+from app.services.notifications import notify_user
 from app.storage.base import StorageBackend
 
 PLUME_LO = "#f5a623"
@@ -68,6 +69,14 @@ class ReportService:
         self.session.add(report)
         await self.session.commit()
         await self.session.refresh(report)
+
+        await notify_user(
+            self.session,
+            user_id=user.id,
+            kind="report_generated",
+            subject="Emissia: report ready",
+            body=f"Your emission report ({ext.upper()}) has been generated and is ready.",
+        )
         return report
 
     async def list_owned(self, user_id: uuid.UUID) -> list[Report]:

@@ -133,7 +133,9 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
     return {
       access_token: "mock-access-token",
       refresh_token: "mock-refresh-token",
-      token_type: "bearer"
+      token_type: "bearer",
+      mfa_required: false,
+      mfa_token: null
     } as unknown as T;
   }
 
@@ -483,13 +485,16 @@ function getMockData<T>(path: string, init?: RequestInit): T | null {
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const access = tokens.access;
   
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+
   let res: Response | undefined;
   let networkFailed = false;
   try {
     res = await fetch(`${BASE}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        // FormData sets its own multipart boundary - never override it here.
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(access ? { Authorization: `Bearer ${access}` } : {}),
         ...init?.headers,
       },
@@ -498,17 +503,16 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
     networkFailed = true;
   }
 
-  // Attempt to resolve via mock fallback if request failed or was blocked by proxy (404/502/etc.)
-  if (networkFailed || (res && !res.ok)) {
+  // Mock fallback only covers genuine network failure (backend unreachable) - a real
+  // response, even an error one (401 wrong password, 422 validation, ...), must never
+  // be shadowed by fake data. This used to also trigger on `res && !res.ok`, which let
+  // a real 401 from a real backend silently retry against the mock user store.
+  if (networkFailed) {
     const mock = getMockData<T>(path, init);
     if (mock !== null) {
       return mock;
     }
-    
-    // If no mock data available and network failed, rethrow
-    if (networkFailed) {
-      throw new Error("Network request failed");
-    }
+    throw new Error("Network request failed");
   }
 
   // Double check res existence (TypeScript safety)
@@ -535,7 +539,10 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  postForm: <T>(path: string, form: FormData) => request<T>(path, { method: "POST", body: form }),
 };

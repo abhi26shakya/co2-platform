@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models import SatelliteImage, Upload
 from app.services.imaging import ALLOWED_EXTENSIONS, InvalidImageError, extract_metadata
+from app.services.notifications import notify_user
 from app.storage.base import StorageBackend
 
 
@@ -48,6 +49,14 @@ class UploadService:
         upload.image_id = image.id
         await self.session.commit()
         await self.session.refresh(image)
+
+        await notify_user(
+            self.session,
+            user_id=owner_id,
+            kind="upload_finished",
+            subject="Emissia: upload complete",
+            body=f"Your upload {filename!r} finished processing and is ready for prediction.",
+        )
         return image
 
     async def _process(

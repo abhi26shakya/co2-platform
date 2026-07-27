@@ -338,6 +338,106 @@ Issues with acceptable workarounds.
 
 ---
 
+## KI-007 — Settings: weekly-summary email has no scheduler behind it
+
+**Classification**: Limitation
+**Discovered**: 2026-07-27, Settings section full rebuild.
+**Description**: `Settings > Notifications > Weekly summary` is a real,
+persisted preference (`user_preferences.notify_weekly_summary`,
+`backend/app/models/preferences.py`), and `EmailService`/`notify_user`
+(`backend/app/services/email.py`, `backend/app/services/notifications.py`)
+can send real email today — but nothing periodically fires a weekly digest.
+The three event-driven notifications (prediction completed, upload
+finished, report generated) send correctly because they're triggered
+inline at the end of the relevant service call
+(`backend/app/services/predictions.py`, `uploads.py`, `reports.py`).
+A weekly digest needs a scheduled job, and this repo has no
+Celery/cron runner yet (`docs/architecture.md`'s post-v1 backlog already
+lists Celery as unscheduled).
+**Impact**: Toggling "Weekly summary" on has no visible effect — the
+preference is saved and honored by nothing. Low impact today since the
+toggle defaults to off.
+**Workaround**: None.
+**Proposed Solution**: Once Celery (or another scheduler) is wired up per
+the post-v1 backlog, add a periodic task that iterates users with
+`notify_weekly_summary=True` and calls `notify_user(..., kind=...)` — the
+preference-gating and send path already exist and don't need to change.
+**Priority**: Medium.
+
+---
+
+## KI-008 — Settings: GitHub and ORCID "Connected Accounts" are not implemented
+
+**Classification**: Limitation
+**Discovered**: 2026-07-27, Settings section full rebuild.
+**Description**: Only Google OAuth account linking is real
+(`backend/app/services/oauth.py`, `GET/DELETE /api/v1/auth/oauth/google/*`).
+GitHub and ORCID entries in `Settings > Account > Connected Accounts`
+(`frontend/src/features/settings/components/account-tab.tsx`) are
+intentionally rendered as disabled "Coming Soon" chips rather than
+fake-functional toggles — a deliberate scope decision made when this
+Settings rebuild was planned, not an oversight.
+**Impact**: None currently — no functionality is misrepresented as
+working.
+**Workaround**: N/A.
+**Proposed Solution**: If GitHub or ORCID linking is prioritized, follow
+the same pattern as `GoogleOAuthService`: signed state-token connect flow,
+callback endpoint, `google_id`/`google_email`-style columns on `User` for
+the new provider.
+**Priority**: Low.
+
+---
+
+## KI-009 — Settings: avatar storage inherits the LocalStorageBackend limitation
+
+**Classification**: Limitation
+**Discovered**: 2026-07-27, Settings section full rebuild.
+**Description**: Avatar upload (`POST /api/v1/settings/avatar`,
+`backend/app/services/settings.py`) reuses the existing `StorageBackend`
+protocol (`backend/app/storage/base.py`) — the same abstraction satellite
+images already use — so it inherits whatever storage backend is
+configured (`LocalStorageBackend` today, `S3StorageBackend` planned per
+`docs/architecture.md`'s post-v1 backlog). No settings-specific work is
+needed when S3 support lands; avatars migrate for free along with images.
+**Impact**: None — documented for context only, so a future S3 migration
+doesn't miss avatars.
+**Workaround**: N/A.
+**Proposed Solution**: N/A — resolved automatically when
+`S3StorageBackend` is implemented.
+**Priority**: Low.
+
+---
+
+## KI-010 — Settings: rapid appearance/AI + notification changes can race
+
+**Classification**: Technical Debt
+**Discovered**: 2026-07-27, Settings section full rebuild code review.
+**Description**: `SettingsProvider`
+(`frontend/src/providers/providers/settings-provider.tsx`) debounces
+appearance/AI-preference changes ~500ms before `PUT`-ing the full
+preferences object, using a `serverPrefs` snapshot captured when the
+debounce timer was armed. `notifications-tab.tsx` writes to the same
+`PUT /settings/preferences` endpoint immediately (no debounce) via
+`useUpdatePreferences`. If a user changes an appearance/AI setting and a
+notification toggle within the same ~500ms window, whichever write lands
+second can overwrite the other's field with its own (slightly stale)
+snapshot, since both are full-replace PUTs built from a point-in-time
+copy rather than a merge at send time.
+**Impact**: Low - narrow timing window, self-correcting on next page load
+(both writes eventually converge once `serverPrefs` re-syncs), no data
+loss beyond the browser session, no security implication.
+**Workaround**: Reload the Settings page after making both kinds of
+changes in quick succession to confirm the final state.
+**Proposed Solution**: Route all preference writes (provider's debounced
+push and the notifications tab's immediate save) through one shared
+mutation/queue that always merges against the latest React Query cache
+value at send time rather than a closure-captured snapshot; or switch
+`PUT /settings/preferences` to a real partial-update (PATCH) semantics
+so concurrent writes to different fields can't clobber each other.
+**Priority**: Medium.
+
+---
+
 # Low Priority Issues
 
 Minor issues and improvements.
