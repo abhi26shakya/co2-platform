@@ -37,7 +37,7 @@ class SatelliteImage(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
 
-class UploadStatus(str, enum.Enum):
+class UploadStatus(enum.StrEnum):
     pending = "pending"
     processing = "processing"
     complete = "complete"

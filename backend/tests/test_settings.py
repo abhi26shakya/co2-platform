@@ -137,7 +137,6 @@ def test_sessions_revoke_one(client, user_factory):
     # A second login = a second session/device.
     login2 = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     tokens_b = login2.json()
-    headers_b = {"Authorization": f"Bearer {tokens_b['access_token']}"}
 
     sessions = client.get("/api/v1/settings/sessions", headers=headers_a).json()
     assert len(sessions) == 2
