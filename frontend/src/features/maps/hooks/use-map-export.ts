@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/services/api-client";
+import type { ReportOut } from "@/types/report";
 
 export type ExportFormat = "png" | "geojson" | "csv" | "json" | "tiff" | "pdf";
 
@@ -10,21 +11,6 @@ export interface ExportHistoryEntry {
   format: string;
   time: string;
   status: string;
-}
-
-/**
- * Matches the REAL backend response shape (backend/app/schemas/report.py), not the much larger
- * `ReportOut` in `types/report.ts` — that type was written against a different, unused mock shape
- * (dataset_name, confidence_score, hotspots, etc.) that the actual `/reports` endpoint never
- * returns. Only `url` is needed here.
- */
-interface CreatedReport {
-  id: string;
-  title: string;
-  format: string;
-  params: Record<string, unknown>;
-  created_at: string;
-  url: string | null;
 }
 
 export interface MapExportData {
@@ -134,7 +120,7 @@ function exportPng(): Promise<{ ok: true } | { ok: false; reason: string }> {
  *  rewrite proxies straight to the backend's (dev-mode, unauthenticated) file-serving route. */
 async function exportPdf(): Promise<{ ok: true } | { ok: false; reason: string }> {
   try {
-    const report = await api.post<CreatedReport>("/reports", { format: "pdf" });
+    const report = await api.post<ReportOut>("/reports", { format: "pdf" });
     if (!report.url) {
       return { ok: false, reason: "Report generated but no download URL was returned." };
     }

@@ -245,37 +245,9 @@ Maintain current unresolved issues here.
 
 Issues requiring immediate attention.
 
-## KI-005 — Reports management UI (frontend) writes fields the backend doesn't have
+## KI-005 — Reports management UI (frontend) writes fields the backend doesn't have (RESOLVED)
 
-**Classification**: Bug (deeper instance of the already-documented `ReportOut`
-type mismatch in TECH_DEBT.md)
-**Discovered**: 2026-07-27, full functionality audit (`AUDIT_REPORT.md`).
-**Description**: `frontend/src/app/(protected)/reports/page.tsx`
-(`createReport.mutate`/`updateReport.mutate` calls at lines 129, 160, 185,
-205, 222, 229, 239, 251, 275) sends ~15 fields the real backend schema
-doesn't have — `dataset_name`, `satellite_source`, `confidence_score`,
-`estimated_co2`, `detected_facilities`, `comments`, `versions`,
-`is_favorite`, `is_archived`, `shares_count`. The real backend `ReportOut`
-only has `id, title, format, params, created_at, url`
-(`backend/app/schemas/report.py`). So favorites, comments, threaded
-replies, version history/restore, and archive are UI-only illusions —
-they silently no-op or 422 against the real API. Additionally: the
-Custom Report Builder's progress bar (`reports/page.tsx:105-147`) is a
-fully simulated `setInterval` animation with hardcoded
-`confidence_score`/`estimated_co2` values keyed off matching a filename
-(`sasan.tif`), and `generateShareLink` (`reports/page.tsx:270`) builds a
-hardcoded fake URL rather than calling any real share-link API.
-**Impact**: The entire reports *management* surface (not just some
-display fields, per the original `ReportOut` tech-debt note) is
-non-functional against a real backend. Highest-impact gap found in the
-2026-07-27 audit.
-**Workaround**: None.
-**Proposed Solution**: Either extend the backend report model/schema to
-genuinely support favorites/comments/versions/sharing, or strip the
-frontend UI down to what the real API supports.
-**Priority**: Critical.
-**Related**: TECH_DEBT.md's existing `ReportOut` mismatch entry (which
-covers display-only fields); this issue covers write/mutation paths.
+See "Resolved Issues" section below for the full writeup and resolution.
 
 ---
 
@@ -439,7 +411,14 @@ Planned Resolution: Unscheduled cleanup task.
 
 ## Debt Item: `frontend/src/types/report.ts`'s `ReportOut` doesn't match the real backend schema
 
-Status: Active — discovered 2026-07-26 during Map Section Redesign
+Status: Resolved (2026-07-27) — fixed as part of KI-005's resolution
+(reports management UI stripped down to match the real API). `ReportOut`
+now declares exactly `id, title, format, params, created_at, url`, and
+`use-map-export.ts`'s local `CreatedReport` workaround was removed in
+favor of importing the corrected shared type. See KI-005 in the Resolved
+Issues section for the full writeup.
+
+Originally: Active — discovered 2026-07-26 during Map Section Redesign
 Milestone 5, not introduced by it.
 
 Description: `types/report.ts` carries a comment claiming it "mirrors
@@ -529,6 +508,72 @@ of via `FlatCompat`. Changed the `lint` script in `package.json` from
 `next lint` to `eslint .`.
 **Related**: Exposed 95 real pre-existing lint findings, tracked as
 KI-002.
+
+## KI-005 — Reports management UI (frontend) writes fields the backend doesn't have (RESOLVED)
+
+**Resolution date**: 2026-07-27
+**Original description**: `frontend/src/app/(protected)/reports/page.tsx`
+(`createReport.mutate`/`updateReport.mutate` calls) sent ~15 fields the
+real backend schema doesn't have — `dataset_name`, `satellite_source`,
+`confidence_score`, `estimated_co2`, `detected_facilities`, `comments`,
+`versions`, `is_favorite`, `is_archived`, `shares_count`. The real
+backend `ReportOut` only has `id, title, format, params, created_at, url`
+(`backend/app/schemas/report.py`). So favorites, comments, threaded
+replies, version history/restore, and archive were UI-only illusions —
+they silently no-op'd or 422'd against the real API (there was no
+`PATCH /reports/{id}` route at all). Additionally: the Custom Report
+Builder's progress bar was a fully simulated `setInterval` animation with
+hardcoded `confidence_score`/`estimated_co2` values, `generateShareLink`
+built a hardcoded fake URL rather than calling any real share-link API,
+and "Move to Trash" actually called the real (hard) `DELETE` — so the
+Trash tab implied recoverability the backend never provided. Compounding
+this, `frontend/src/services/api-client.ts` had an entire client-side
+mock-fallback subsystem (`DEFAULT_REPORTS`, `getMockReports`/
+`saveMockReports`, localStorage-backed POST/PATCH/DELETE handlers for
+`/reports`) that transparently faked success whenever the real backend
+call failed or 404'd — this is *why* the illusion held up in the browser:
+favorites/comments/versions "worked" via localStorage even though nothing
+ever reached the database.
+**Solution implemented**: Rewrote the reports feature to only use fields
+the real backend returns.
+- `frontend/src/types/report.ts`: `ReportOut` narrowed to
+  `{ id, title, format: "pdf"|"csv", params, created_at, url }`, matching
+  `backend/app/schemas/report.py` exactly. Removed the unused
+  `ReportComment`/`ReportVersion` types.
+- `frontend/src/features/reports/hooks/use-reports.ts`: removed
+  `useUpdateReport` (no `PATCH /reports/{id}` route exists);
+  `useCreateReport` now only sends `{ format }`.
+- `frontend/src/app/(protected)/reports/page.tsx`: rewritten as a plain
+  list — search by title, sort by date/name, a format picker + "Generate
+  Report" button calling the real synchronous PDF/CSV generator, a real
+  download link via the returned `url` (served by the backend's
+  `/api/v1/files/{key}` route), and a real (hard) delete with a
+  confirmation that no longer implies a recoverable trash. Removed
+  favorites, archive, trash, comments/discussion, version history,
+  sharing, and the simulated Custom Report Builder wizard entirely, since
+  none of it was backed by real persistence.
+- `frontend/src/app/(protected)/dashboard/page.tsx`: replaced the
+  three-widget "Pinned / Recent / Recently Downloaded" reports section
+  (which depended on `is_favorite`/`downloads_count`, neither of which
+  exist) with a single "Recent Reports" list using only `title`,
+  `format`, `created_at`.
+- `frontend/src/features/maps/hooks/use-map-export.ts`: its already-correct
+  local `CreatedReport` type (added ad hoc as a workaround, per
+  `TECH_DEBT.md`) was replaced with the now-correct shared `ReportOut`.
+- `frontend/src/services/api-client.ts`: removed the entire
+  `/reports`-related mock-fallback subsystem
+  (`DEFAULT_REPORTS`/`getMockReports`/`saveMockReports`, the fabricated
+  report created inside the `/predictions` POST mock, and the
+  favorites/archive/comments/versions PATCH mock) and replaced the
+  `/reports` GET/POST mocks with minimal handlers returning the real
+  shape. Also dropped the now-nonexistent `reports_count`/
+  `downloads_count`/`shares_count`/`favorites_count`/`storage_used_mb`
+  fields from the `/dashboard` mock (the real `DashboardStats` schema
+  never had them either).
+**Verification**: `npm run typecheck`, `npx eslint` (scoped to changed
+files), and `npm run build` all pass clean.
+**Related**: TECH_DEBT.md's `ReportOut` mismatch entry (now resolved by
+the same change — the type finally mirrors the backend); KI-002.
 
 ## KI-002 — Frontend lint exposed 95 pre-existing findings (RESOLVED)
 
