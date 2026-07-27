@@ -2,7 +2,7 @@
 
 import { api } from "@/services/api-client";
 import { tokens } from "@/lib/auth-tokens";
-import type { TokenPair, UserRead } from "@/types/auth";
+import type { LoginResult, TokenPair, UserRead } from "@/types/auth";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
@@ -20,7 +20,22 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { email: string; password: string }) =>
-      api.post<TokenPair>("/auth/login", data),
+      api.post<LoginResult>("/auth/login", data),
+    onSuccess: (result) => {
+      if (result.mfa_required) return; // caller shows the 2FA step instead
+      tokens.set({ access_token: result.access_token!, refresh_token: result.refresh_token! });
+      qc.invalidateQueries({ queryKey: ["me"] });
+      router.push("/dashboard");
+    },
+  });
+}
+
+export function useVerify2FALogin() {
+  const router = useRouter();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { mfa_token: string; code: string }) =>
+      api.post<TokenPair>("/auth/2fa/verify", data),
     onSuccess: (pair) => {
       tokens.set(pair);
       qc.invalidateQueries({ queryKey: ["me"] });

@@ -1,10 +1,26 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { settingsApi } from "@/features/settings/api/settings-api";
+import { DEFAULT_PREFERENCES, usePreferences } from "@/features/settings/hooks/use-preferences";
+import { tokens } from "@/lib/auth-tokens";
+import type { PreferencesOut } from "@/types/settings";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
 function readLocal(key: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   return localStorage.getItem(key) ?? fallback;
+}
+
+function readLocalBool(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : raw === "true";
+}
+
+function readLocalNumber(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  const raw = localStorage.getItem(key);
+  return raw === null ? fallback : Number(raw);
 }
 
 interface SettingsContextType {
@@ -35,27 +51,76 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
+// t/year <-> kg/day is a display-only unit swap kept purely on the client;
+// the backend stores prediction_units as "t_per_year" | "kg_per_day".
+const unitsToBackend = (v: string) => (v === "kg/day" ? "kg_per_day" : "t_per_year");
+const unitsFromBackend = (v: string) => (v === "kg_per_day" ? "kg/day" : "t/year");
+
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  // localStorage seeds state for an instant paint before the network response
+  // lands - it is a cache, not the source of truth. GET /settings/preferences
+  // (below) overwrites it as soon as it resolves.
   const [theme, setTheme] = useState(() => readLocal("settings_appearance_theme", "dark"));
   const [resolvedTheme, setResolvedTheme] = useState("dark");
   const [accent, setAccent] = useState(() => readLocal("settings_appearance_accent", "green"));
-  const [reducedMotion, setReducedMotion] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("settings_appearance_reduced_motion") === "true"
+  const [reducedMotion, setReducedMotion] = useState(() =>
+    readLocalBool("settings_appearance_reduced_motion", false)
   );
-  const [compactMode, setCompactMode] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("settings_appearance_compact_mode") === "true"
-  );
+  const [compactMode, setCompactMode] = useState(() => readLocalBool("settings_appearance_compact_mode", false));
 
   const [aiModel, setAiModel] = useState(() => readLocal("settings_ai_model", "unet-v1"));
-  const [aiThreshold, setAiThreshold] = useState(() => Number(readLocal("settings_ai_threshold", "85")));
+  const [aiThreshold, setAiThreshold] = useState(() => readLocalNumber("settings_ai_threshold", 85));
   const [aiPalette, setAiPalette] = useState(() => readLocal("settings_ai_palette", "viridis"));
   const [aiUnits, setAiUnits] = useState(() => readLocal("settings_ai_units", "t/year"));
-  const [aiAutorun, setAiAutorun] = useState(
-    () => typeof window === "undefined" || localStorage.getItem("settings_ai_autorun") !== "false"
-  );
-  const [aiExplainable, setAiExplainable] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("settings_ai_explainable") === "true"
-  );
+  const [aiAutorun, setAiAutorun] = useState(() => readLocalBool("settings_ai_autorun", true));
+  const [aiExplainable, setAiExplainable] = useState(() => readLocalBool("settings_ai_explainable", false));
+
+  const { data: serverPrefs } = usePreferences();
+  const hydratedRef = useRef(false);
+
+  // Hydrate every local field from the server once it resolves - this is the
+  // moment localStorage stops being authoritative for this session.
+  useEffect(() => {
+    if (!serverPrefs || hydratedRef.current) return;
+    hydratedRef.current = true;
+    setTheme(serverPrefs.theme);
+    setAccent(serverPrefs.accent_color);
+    setReducedMotion(serverPrefs.reduced_motion);
+    setCompactMode(serverPrefs.compact_mode);
+    setAiModel(serverPrefs.ai_default_model);
+    setAiThreshold(Math.round(serverPrefs.confidence_threshold * 100));
+    setAiPalette(serverPrefs.heatmap_palette);
+    setAiUnits(unitsFromBackend(serverPrefs.prediction_units));
+    setAiAutorun(serverPrefs.auto_run_after_upload);
+    setAiExplainable(serverPrefs.xai_enabled);
+  }, [serverPrefs]);
+
+  // Debounced write-through to the backend. localStorage is still written
+  // synchronously (below, per updater) so a reload before the debounce fires
+  // doesn't lose the change.
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const push = (partial: Partial<PreferencesOut>) => {
+    if (typeof window === "undefined" || !tokens.access) return;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      const base: PreferencesOut = serverPrefs ?? {
+        ...DEFAULT_PREFERENCES,
+        theme: theme as PreferencesOut["theme"],
+        accent_color: accent as PreferencesOut["accent_color"],
+        reduced_motion: reducedMotion,
+        compact_mode: compactMode,
+        ai_default_model: aiModel,
+        heatmap_palette: aiPalette as PreferencesOut["heatmap_palette"],
+        confidence_threshold: aiThreshold / 100,
+        prediction_units: unitsToBackend(aiUnits) as PreferencesOut["prediction_units"],
+        auto_run_after_upload: aiAutorun,
+        xai_enabled: aiExplainable,
+      };
+      settingsApi.putPreferences({ ...base, ...partial }).catch(() => {
+        /* best-effort; the next successful save reconciles state */
+      });
+    }, 500);
+  };
 
   // Sync resolved theme with theme + media query
   useEffect(() => {
@@ -80,7 +145,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [theme]);
 
-  // Sync resolvedTheme class to documentElement
   useEffect(() => {
     const html = document.documentElement;
     if (resolvedTheme === "light") {
@@ -92,7 +156,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [resolvedTheme]);
 
-  // Sync accent style to documentElement
   useEffect(() => {
     const html = document.documentElement;
     if (accent === "blue") {
@@ -100,11 +163,10 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } else if (accent === "purple") {
       html.style.setProperty("--color-sensor", "#a855f7");
     } else {
-      html.style.setProperty("--color-sensor", "#34d399"); // default green
+      html.style.setProperty("--color-sensor", "#34d399");
     }
   }, [accent]);
 
-  // Sync animation classes to documentElement
   useEffect(() => {
     const html = document.documentElement;
     if (reducedMotion) {
@@ -114,7 +176,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [reducedMotion]);
 
-  // Sync compact mode class to documentElement
   useEffect(() => {
     const html = document.documentElement;
     if (compactMode) {
@@ -127,54 +188,63 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const updateTheme = (v: string) => {
     setTheme(v);
     localStorage.setItem("settings_appearance_theme", v);
+    push({ theme: v as PreferencesOut["theme"] });
   };
 
   const updateAccent = (v: string) => {
     setAccent(v);
     localStorage.setItem("settings_appearance_accent", v);
+    push({ accent_color: v as PreferencesOut["accent_color"] });
   };
 
   const updateReducedMotion = (v: boolean) => {
     setReducedMotion(v);
     localStorage.setItem("settings_appearance_reduced_motion", String(v));
+    push({ reduced_motion: v });
   };
 
   const updateCompactMode = (v: boolean) => {
     setCompactMode(v);
     localStorage.setItem("settings_appearance_compact_mode", String(v));
+    push({ compact_mode: v });
   };
 
   const updateAiModel = (v: string) => {
     setAiModel(v);
     localStorage.setItem("settings_ai_model", v);
+    push({ ai_default_model: v });
   };
 
   const updateAiThreshold = (v: number) => {
     setAiThreshold(v);
     localStorage.setItem("settings_ai_threshold", String(v));
+    push({ confidence_threshold: v / 100 });
   };
 
   const updateAiPalette = (v: string) => {
     setAiPalette(v);
     localStorage.setItem("settings_ai_palette", v);
+    push({ heatmap_palette: v as PreferencesOut["heatmap_palette"] });
   };
 
   const updateAiUnits = (v: string) => {
     setAiUnits(v);
     localStorage.setItem("settings_ai_units", v);
+    push({ prediction_units: unitsToBackend(v) as PreferencesOut["prediction_units"] });
   };
 
   const updateAiAutorun = (v: boolean) => {
     setAiAutorun(v);
     localStorage.setItem("settings_ai_autorun", String(v));
+    push({ auto_run_after_upload: v });
   };
 
   const updateAiExplainable = (v: boolean) => {
     setAiExplainable(v);
     localStorage.setItem("settings_ai_explainable", String(v));
+    push({ xai_enabled: v });
   };
 
-  // Convert tonnesValue to selected display units
   const formatEmission = (tonnesValue: number) => {
     if (aiUnits === "kg/day") {
       const kgDay = (tonnesValue * 1000) / 365;
@@ -189,7 +259,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
-  // Perform dynamic mathematical palette interpolation for Viridis, Inferno, Plasma, and Turbo
   const getHotspotColor = (t: number): string => {
     const mix = (c1: { r: number; g: number; b: number }, c2: { r: number; g: number; b: number }, weight: number) => {
       const r = Math.round(c1.r + (c2.r - c1.r) * weight);
@@ -221,7 +290,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (t < 0.66) return mix(c2, c3, (t - 0.33) * 3);
       return mix(c3, c4, (t - 0.66) * 3);
     }
-    // Default Viridis
     const v1 = { r: 0x44, g: 0x01, b: 0x54 };
     const v2 = { r: 0x21, g: 0x91, b: 0x8c };
     const v3 = { r: 0xfd, g: 0xe7, b: 0x25 };

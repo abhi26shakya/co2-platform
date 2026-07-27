@@ -12,6 +12,7 @@ from app.repositories.predictions import PredictionRepository
 from app.schemas.prediction import PredictionRequest
 from app.schemas.prediction_api import PredictionOut
 from app.services.inference.factory import get_inference_client
+from app.services.notifications import notify_user
 from app.storage.local import get_storage
 
 
@@ -85,6 +86,18 @@ class PredictionService:
         out = PredictionOut.model_validate(prediction)
         out.model_version = result.model_version
         out.image_filename = image.filename
+
+        await notify_user(
+            self.session,
+            user_id=owner_id,
+            kind="prediction_completed",
+            subject="Emissia: prediction complete",
+            body=(
+                f"Your prediction for {image.filename} is ready: "
+                f"{result.co2_emission_tonnes_per_year:.1f} t CO2/year "
+                f"(confidence {result.confidence:.1f}%)."
+            ),
+        )
         return out
 
     async def _build_ml_request(self, image: SatelliteImage) -> PredictionRequest:

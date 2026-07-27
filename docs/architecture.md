@@ -151,8 +151,49 @@ Hotspots stored as JSONB — the structure will evolve with the model.
 - Landing page: orbital SVG hero (no WebGL), scroll reveals via framer-motion
   honoring prefers-reduced-motion, features grid, research motivation, CTAs.
 
+## Settings rebuild (stage 15)
+
+The Settings section (`frontend/src/features/settings/`, backend
+`app/api/v1/settings.py` + extended `app/api/v1/auth.py`) went from
+almost entirely non-functional (localStorage-only or `setTimeout`-faked)
+to fully backed by real endpoints:
+
+- Profile fields (organization/job title/country/bio) and avatar upload
+  reuse the same `StorageBackend` protocol as satellite images
+  (`app/services/settings.py`) - S3 migration covers avatars for free.
+- Password change revokes all other sessions; account deletion is a soft
+  delete (`is_active=False`, anonymized, row kept for FK integrity with
+  predictions/uploads/reports) - see `app/services/settings.py`.
+- Real per-device session list/revoke: `RefreshToken` gained device
+  metadata columns, and access tokens now carry a `sid` claim
+  (`app/core/security.py`) tying them to the refresh-token row that
+  issued them, so "this device" can be identified without asking the
+  client to resend its refresh token.
+- Real TOTP 2FA (`app/services/security2fa.py`): setup/QR/backup codes,
+  enforced at login via a short-lived `mfa` token distinct from access
+  tokens (rejected by every protected route).
+- Real Google OAuth account linking (`app/services/oauth.py`) - this is
+  account *linking* for an already-authenticated user, not "Sign in with
+  Google"; the platform's only sign-up path remains email/password.
+- Appearance/AI/notification preferences persist server-side
+  (`user_preferences` table, `app/repositories/preferences.py`) instead
+  of `localStorage`-only, with `SettingsProvider` now hydrating from the
+  API and using `localStorage` only as an instant-paint cache.
+- Real SMTP email delivery (`app/services/email.py` +
+  `app/services/notifications.py`), hooked into prediction/upload/report
+  completion, gated per-user by preference, best-effort/non-blocking
+  (never fails the request that triggered it).
+
+Known follow-ups from this stage are tracked in
+`.claude/docs/KNOWN_ISSUES.md` (KI-007, KI-008, KI-009): weekly-summary
+email has no scheduler behind it yet, GitHub/ORCID account linking is
+intentionally out of scope, and avatar storage's S3 migration is already
+covered by the existing `StorageBackend` abstraction.
+
 ## Post-v1 backlog
 
-Celery for heavy reports/preprocessing · S3 storage backend · Google OAuth ·
-before/after scene comparison · plant auto-matching on upload (nearest plant
-within scene bounds) · Redis-backed rate limits in compose.
+Celery for heavy reports/preprocessing (would also unblock the
+weekly-summary email digest, KI-007) · S3 storage backend · before/after
+scene comparison · plant auto-matching on upload (nearest plant within
+scene bounds) · Redis-backed rate limits in compose · GitHub/ORCID account
+linking (KI-008).

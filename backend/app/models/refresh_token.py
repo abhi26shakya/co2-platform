@@ -9,7 +9,11 @@ from app.models.mixins import UUIDPrimaryKeyMixin
 
 
 class RefreshToken(Base, UUIDPrimaryKeyMixin):
-    """Hashed refresh tokens - enables real logout and rotation."""
+    """Hashed refresh tokens - enables real logout and rotation.
+
+    Also doubles as the "session" record shown in Settings > Sessions: one
+    row per issued token = one logged-in device.
+    """
 
     __tablename__ = "refresh_tokens"
 
@@ -22,3 +26,8 @@ class RefreshToken(Base, UUIDPrimaryKeyMixin):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    device_name: Mapped[str | None] = mapped_column(String(255))
+    ip_address: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -40,12 +40,32 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 14
 
     cors_origins: list[str] = ["http://localhost:3000"]
+    frontend_url: str = "http://localhost:3000"
 
     # Abuse protection (per-IP; backed by Redis when redis_url is set)
     rate_limit_enabled: bool = True
     auth_rate_limit: str = "30/minute"
     rate_limit_storage: str = "memory://"
     redis_url: str | None = None
+
+    # Google OAuth (Settings > Connected Accounts). Unset client id/secret
+    # disables the connect flow client-side - see /auth/oauth/google/status.
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = None
+    google_oauth_redirect_uri: str = "http://localhost:8000/api/v1/auth/oauth/google/callback"
+
+    # Email (Settings > Notifications delivery). Disabled by default so local
+    # dev without SMTP creds doesn't break - sends are logged, not thrown.
+    smtp_enabled: bool = False
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_address: str = "no-reply@emissia.dev"
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
 
     @model_validator(mode="after")
     def _guard_default_jwt_secret(self) -> "Settings":
