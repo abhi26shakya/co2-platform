@@ -14,19 +14,7 @@ export function useReports() {
 export function useCreateReport() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<ReportOut>) => api.post<ReportOut>("/reports", data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["reports"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
-}
-
-export function useUpdateReport() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<ReportOut> }) =>
-      api.patch<ReportOut>(`/reports/${id}`, data),
+    mutationFn: (data: { format: "pdf" | "csv" }) => api.post<ReportOut>("/reports", data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["reports"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
