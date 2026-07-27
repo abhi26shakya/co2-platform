@@ -45,6 +45,118 @@ def test_run_prediction_persists(client, auth_headers, png_bytes):
     assert listed["items"][0]["id"] == body["id"]
 
 
+def test_heatmap_url_persisted_and_returned(client, auth_headers, png_bytes, monkeypatch):
+    """Prediction.heatmap_key stores whatever heatmap_url the inference
+    client returns, and the API echoes it back as heatmap_url."""
+    from app.schemas.prediction import Hotspot, PredictionResultV1
+    from app.services import predictions as predictions_module
+
+    class _FakeClientWithHeatmap:
+        async def predict(self, request):
+            return PredictionResultV1(
+                co2_emission_tonnes_per_year=1234.5,
+                confidence=90.0,
+                hotspots=[Hotspot(lat=25.0, lon=77.0, intensity=0.5)],
+                heatmap_url="https://ml.example.test/heatmaps/abc123.png",
+                model_version="mock-0.1.0",
+                inference_time_ms=12.3,
+            )
+
+        async def health(self):
+            return True
+
+    monkeypatch.setattr(
+        predictions_module, "get_inference_client", lambda: _FakeClientWithHeatmap()
+    )
+
+    image_id = _make_image(client, auth_headers, png_bytes, name="heatmap-scene.png")
+    r = client.post("/api/v1/predictions", json={"image_id": image_id}, headers=auth_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["heatmap_url"] == "https://ml.example.test/heatmaps/abc123.png"
+
+    got = client.get(f"/api/v1/predictions/{body['id']}", headers=auth_headers)
+    assert got.json()["heatmap_url"] == "https://ml.example.test/heatmaps/abc123.png"
+
+    listed = client.get(
+        f"/api/v1/predictions?image_id={image_id}", headers=auth_headers
+    ).json()
+    assert listed["items"][0]["heatmap_url"] == "https://ml.example.test/heatmaps/abc123.png"
+
+
+def test_v2_oco3_estimated_result_persisted(client, auth_headers, png_bytes, monkeypatch):
+    from app.schemas.prediction import Hotspot, PredictionResultV2
+    from app.services import predictions as predictions_module
+
+    class _FakeV2Client:
+        async def predict(self, request):
+            return PredictionResultV2(
+                data_source="oco3_estimated",
+                detection_confidence=91.0,
+                co2_emission_tonnes_per_year=5200.0,
+                co2_estimate_low=3400.0,
+                co2_estimate_high=7100.0,
+                co2_ppm_enhancement=2.1,
+                hotspots=[Hotspot(lat=24.1, lon=82.67, intensity=0.8)],
+                model_version="combined-v1",
+                inference_time_ms=42.0,
+            )
+
+        async def health(self):
+            return True
+
+    monkeypatch.setattr(predictions_module, "get_inference_client", lambda: _FakeV2Client())
+
+    image_id = _make_image(client, auth_headers, png_bytes, name="v2-scene.png")
+    r = client.post("/api/v1/predictions", json={"image_id": image_id}, headers=auth_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["schema_version"] == "v2"
+    assert body["data_source"] == "oco3_estimated"
+    assert body["detection_confidence"] == 91.0
+    assert body["co2_emission_tonnes_per_year"] == 5200.0
+    assert body["co2_estimate_low"] == 3400.0
+    assert body["co2_estimate_high"] == 7100.0
+    assert body["co2_ppm_enhancement"] == 2.1
+    assert body["confidence"] is None  # v1-only field, not conflated with detection_confidence
+
+    got = client.get(f"/api/v1/predictions/{body['id']}", headers=auth_headers).json()
+    assert got["data_source"] == "oco3_estimated"
+    assert got["co2_estimate_high"] == 7100.0
+
+
+def test_v2_cnn_proxy_result_has_null_emissions(client, auth_headers, png_bytes, monkeypatch):
+    from app.schemas.prediction import Hotspot, PredictionResultV2
+    from app.services import predictions as predictions_module
+
+    class _FakeV2ProxyClient:
+        async def predict(self, request):
+            return PredictionResultV2(
+                data_source="cnn_proxy",
+                detection_confidence=68.0,
+                hotspots=[Hotspot(lat=19.0, lon=72.8, intensity=0.5)],
+                model_version="combined-v1",
+                inference_time_ms=30.0,
+            )
+
+        async def health(self):
+            return True
+
+    monkeypatch.setattr(
+        predictions_module, "get_inference_client", lambda: _FakeV2ProxyClient()
+    )
+
+    image_id = _make_image(client, auth_headers, png_bytes, name="v2-proxy-scene.png")
+    r = client.post("/api/v1/predictions", json={"image_id": image_id}, headers=auth_headers)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["data_source"] == "cnn_proxy"
+    assert body["detection_confidence"] == 68.0
+    assert body["co2_emission_tonnes_per_year"] is None
+    assert body["co2_estimate_low"] is None
+    assert body["co2_estimate_high"] is None
+
+
 def test_prediction_unknown_image_404(client, auth_headers):
     r = client.post(
         "/api/v1/predictions",

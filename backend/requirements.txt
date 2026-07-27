@@ -23,3 +23,12 @@ qrcode[pil]==8.0
 google-auth==2.38.0
 google-auth-oauthlib==1.2.1
 aiosmtplib==3.0.2
+
+# Track A (OCO-3 physics pipeline, app/services/oco3_analysis.py) +
+# earth engine NO2/wind co-location. earthengine-api overlaps with
+# ml-service's - kept as a separate pin here since the two services
+# deploy independently.
+earthengine-api==1.5.5
+earthaccess==0.14.0
+xarray==2024.11.0
+netCDF4==1.7.2

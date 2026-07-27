@@ -16,6 +16,7 @@ def _row_to_out(row) -> PredictionOut:
     out = PredictionOut.model_validate(prediction)
     out.image_filename = filename
     out.model_version = version
+    out.heatmap_url = prediction.heatmap_key
     return out
 
 

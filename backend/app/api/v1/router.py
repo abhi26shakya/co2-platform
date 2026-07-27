@@ -7,6 +7,7 @@ from app.api.v1 import (
     health,
     images,
     models,
+    plants,
     predictions,
     reports,
     settings,
@@ -22,3 +23,4 @@ api_router.include_router(analytics.router)
 api_router.include_router(reports.router)
 api_router.include_router(models.router)
 api_router.include_router(settings.router)
+api_router.include_router(plants.router)

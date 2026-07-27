@@ -1,3 +1,22 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
 pydantic==2.11.4
+pydantic-settings==2.9.1
+httpx==0.28.1
+
+# Real-model deps (CO2ML_PREDICTOR=combined, app/inference/model.py).
+# Not needed in mock mode, but always installed so flipping the env var
+# doesn't require a rebuild. No rasterio - neither track processes the
+# uploaded GeoTIFF, both fetch their own inputs (GEE tiles / OCO-3
+# soundings), so the heavy GDAL system deps rasterio needs aren't worth
+# paying for here. No earthaccess/xarray/netCDF4 - those are Track A
+# (OCO-3) deps and Track A runs in backend, not here (see
+# backend/requirements.txt) - ml-service only ever touches Earth Engine
+# (Track B: NO2/SO2 tiles).
+torch==2.5.1
+numpy==2.1.3
+requests==2.32.3
+earthengine-api==1.5.5
+google-auth==2.38.0

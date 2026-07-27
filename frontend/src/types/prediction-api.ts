@@ -7,10 +7,18 @@ export interface PredictionOut {
   status: "completed" | "failed";
   schema_version: string;
   co2_emission_tonnes_per_year: number | null;
-  confidence: number | null;
+  confidence: number | null; // v1 only - see data_source for v2 predictions
   hotspots: Hotspot[] | null;
   inference_time_ms: number | null;
   created_at: string;
+  // v2 fields - null on v1 rows. When data_source is set, don't assume
+  // co2_emission_tonnes_per_year is present - it's null for "cnn_proxy"/
+  // "unavailable" (no direct CO2 measurement for that location).
+  data_source: "oco3_estimated" | "cnn_proxy" | "unavailable" | null;
+  detection_confidence: number | null;
+  co2_ppm_enhancement: number | null;
+  co2_estimate_low: number | null;
+  co2_estimate_high: number | null;
   model_version: string | null;
   image_filename: string | null;
 }

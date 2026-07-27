@@ -27,7 +27,18 @@ class Prediction(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False)
     schema_version: Mapped[str] = mapped_column(String(10), default="v1", nullable=False)
     co2_emission_tonnes_per_year: Mapped[float | None] = mapped_column(Float)
-    confidence: Mapped[float | None] = mapped_column(Float)
+    confidence: Mapped[float | None] = mapped_column(Float)  # v1 only
     hotspots: Mapped[list | None] = mapped_column(JSONB)  # structure evolves with the model
     heatmap_key: Mapped[str | None] = mapped_column(String(1024))
     inference_time_ms: Mapped[float | None] = mapped_column(Float)
+
+    # v2 fields (see schemas/prediction.py's PredictionResultV2) - all null
+    # on v1 rows. data_source distinguishes a real OCO-3-derived estimate
+    # from a CNN-only detection proxy; never null co2_emission_tonnes_per_year
+    # is populated only for "oco3_estimated" - the frontend must branch on
+    # data_source, not assume the tonnes figure is always present.
+    data_source: Mapped[str | None] = mapped_column(String(20))
+    detection_confidence: Mapped[float | None] = mapped_column(Float)
+    co2_ppm_enhancement: Mapped[float | None] = mapped_column(Float)
+    co2_estimate_low: Mapped[float | None] = mapped_column(Float)
+    co2_estimate_high: Mapped[float | None] = mapped_column(Float)

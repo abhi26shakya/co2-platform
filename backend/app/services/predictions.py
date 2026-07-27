@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import InferenceLog, Prediction, SatelliteImage
 from app.repositories.images import ImageRepository
 from app.repositories.predictions import PredictionRepository
-from app.schemas.prediction import PredictionRequest
+from app.schemas.prediction import PredictionRequest, PredictionResultV2
 from app.schemas.prediction_api import PredictionOut
 from app.services.inference.factory import get_inference_client
 from app.services.notifications import notify_user
@@ -59,6 +59,7 @@ class PredictionService:
             raise PredictionError(502, "Inference service failed") from e
 
         model = await self.predictions.get_model_by_version(result.model_version)
+        is_v2 = isinstance(result, PredictionResultV2)
         prediction = await self.predictions.add(
             Prediction(
                 image_id=image.id,
@@ -67,9 +68,15 @@ class PredictionService:
                 status="completed",
                 schema_version=result.schema_version,
                 co2_emission_tonnes_per_year=result.co2_emission_tonnes_per_year,
-                confidence=result.confidence,
+                confidence=None if is_v2 else result.confidence,
                 hotspots=[h.model_dump() for h in result.hotspots],
+                heatmap_key=result.heatmap_url,
                 inference_time_ms=result.inference_time_ms,
+                data_source=result.data_source if is_v2 else None,
+                detection_confidence=result.detection_confidence if is_v2 else None,
+                co2_ppm_enhancement=result.co2_ppm_enhancement if is_v2 else None,
+                co2_estimate_low=result.co2_estimate_low if is_v2 else None,
+                co2_estimate_high=result.co2_estimate_high if is_v2 else None,
             )
         )
         self.session.add(
@@ -86,19 +93,37 @@ class PredictionService:
         out = PredictionOut.model_validate(prediction)
         out.model_version = result.model_version
         out.image_filename = image.filename
+        out.heatmap_url = prediction.heatmap_key
 
         await notify_user(
             self.session,
             user_id=owner_id,
             kind="prediction_completed",
             subject="Emissia: prediction complete",
-            body=(
-                f"Your prediction for {image.filename} is ready: "
-                f"{result.co2_emission_tonnes_per_year:.1f} t CO2/year "
-                f"(confidence {result.confidence:.1f}%)."
-            ),
+            body=self._notification_body(image.filename, result, is_v2),
         )
         return out
+
+    @staticmethod
+    def _notification_body(filename: str, result, is_v2: bool) -> str:
+        if not is_v2:
+            return (
+                f"Your prediction for {filename} is ready: "
+                f"{result.co2_emission_tonnes_per_year:.1f} t CO2/year "
+                f"(confidence {result.confidence:.1f}%)."
+            )
+        if result.data_source == "oco3_estimated" and result.co2_emission_tonnes_per_year:
+            return (
+                f"Your prediction for {filename} is ready: an estimated "
+                f"{result.co2_emission_tonnes_per_year:.1f} t CO2/year "
+                f"[{result.co2_estimate_low:.0f}-{result.co2_estimate_high:.0f}] "
+                "based on nearby OCO-3 satellite measurements."
+            )
+        return (
+            f"Your prediction for {filename} is ready: a combustion source was "
+            f"detected with {result.detection_confidence:.1f}% confidence "
+            "(no direct CO2 measurement available for this location)."
+        )
 
     async def _build_ml_request(self, image: SatelliteImage) -> PredictionRequest:
         url = await get_storage().get_url(image.storage_key)
