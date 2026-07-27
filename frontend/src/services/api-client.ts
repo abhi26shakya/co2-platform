@@ -503,16 +503,28 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
     networkFailed = true;
   }
 
-  // Mock fallback only covers genuine network failure (backend unreachable) - a real
-  // response, even an error one (401 wrong password, 422 validation, ...), must never
-  // be shadowed by fake data. This used to also trigger on `res && !res.ok`, which let
-  // a real 401 from a real backend silently retry against the mock user store.
-  if (networkFailed) {
+  // MOCK_MODE deployments (no BACKEND_URL configured at build time - see
+  // next.config.ts) have no real backend at all: the rewrite proxies to a
+  // dead destination, which typically comes back as a real (non-network-
+  // failure) HTTP error from Vercel's infra, not a thrown fetch(). Those
+  // must still fall back to mock data, or the whole deployment is unusable.
+  //
+  // Deployments WITH a real backend must never fall back on an error
+  // *response* (401 wrong password, 422 validation, ...) - only on a
+  // genuine network failure - so a real error is never silently shadowed
+  // by fake data. (This used to also trigger on `res && !res.ok`, which
+  // let a real 401 from a real backend silently retry against the mock
+  // user store - that regressed in the other direction: MOCK_MODE
+  // deployments stopped falling back on non-network-failure error
+  // responses at all, since those were the only case they actually hit.)
+  const mockMode = process.env.NEXT_PUBLIC_MOCK_MODE === "true";
+  const shouldFallBackToMock = networkFailed || (mockMode && res && !res.ok);
+  if (shouldFallBackToMock) {
     const mock = getMockData<T>(path, init);
     if (mock !== null) {
       return mock;
     }
-    throw new Error("Network request failed");
+    if (networkFailed) throw new Error("Network request failed");
   }
 
   // Double check res existence (TypeScript safety)
