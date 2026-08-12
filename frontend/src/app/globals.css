@@ -24,7 +24,9 @@
   --color-alert: #f87171;        /* errors */
   --color-warn: #fbbf24;         /* warnings (chrome-safe, distinct from plume-low) */
 
-  /* Voyager glow trio - general UI chrome (nav, hero, globe, buttons). */
+  /* Voyager glow trio - general UI chrome (nav, hero, globe, buttons).
+     Dark-mode values; html.light below gives these a deeper, richer set
+     tuned for a light background instead of just reusing the neon tones. */
   --color-voyager-violet: #7c5cff;
   --color-voyager-magenta: #e64980; /* shared anchor with --color-plume-high */
   --color-voyager-blue: #4f7cff;
@@ -44,6 +46,18 @@
 
 :root {
   color-scheme: dark;
+  /* Hero globe glow - a plain custom property (not @theme) since it holds a
+     full gradient, not a single color; html.light overrides it below with a
+     softer, cooler version so the globe reads as an intentional light-mode
+     vignette instead of the dark-mode nebula pasted onto a white page. */
+  --hero-atmosphere-gradient: radial-gradient(
+    closest-side,
+    rgba(124, 92, 255, 0.35),
+    rgba(230, 73, 128, 0.22) 40%,
+    rgba(79, 124, 255, 0.14) 62%,
+    transparent 72%
+  );
+  --hero-atmosphere-blur: 36px;
 }
 
 html.light {
@@ -56,12 +70,30 @@ html.light {
   --color-alert: #dc2626;
   --color-warn: #b45309;
 
+  --color-voyager-violet: #5b46c4;
+  --color-voyager-magenta: #b8366f;
+  --color-voyager-blue: #2f5fd6;
+
   --glass-surface: rgba(255, 255, 255, 0.55);
   --glass-surface-strong: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(25, 28, 34, 0.08);
   --glass-highlight: rgba(255, 255, 255, 0.8);
   --shadow-color: rgba(30, 35, 45, 0.12);
   color-scheme: light;
+
+  /* Not a glow at all in light mode - a soft ambient shadow that seats the
+     globe on the warm paper background, with only a trace of brand indigo
+     so it stays on-palette. Warm-neutral core keeps it from turning the
+     cream page grey/violet; the tint fades out well before the container
+     edge so there's no visible circular boundary. */
+  --hero-atmosphere-gradient: radial-gradient(
+    closest-side,
+    rgba(122, 112, 148, 0.14),
+    rgba(90, 78, 130, 0.09) 42%,
+    rgba(63, 47, 158, 0.04) 60%,
+    transparent 70%
+  );
+  --hero-atmosphere-blur: 52px;
 }
 
 body {
@@ -191,18 +223,13 @@ body {
   color: transparent;
 }
 
-/* Voyager chrome glow - hero backdrops, globe limb glow. A tighter falloff
-   and lighter blur than a generic soft blob, so the glow reads as a defined
-   circle behind the globe rather than an amorphous haze. */
+/* Voyager chrome glow - hero backdrops, globe limb glow. Gradient + blur
+   come from --hero-atmosphere-gradient/-blur (see :root / html.light above)
+   so the glow reads as an intentional vignette in both themes instead of
+   dark-mode-only colors pasted onto a light background. */
 .hero-atmosphere {
-  background-image: radial-gradient(
-    closest-side,
-    rgba(124, 92, 255, 0.35),
-    rgba(230, 73, 128, 0.22) 40%,
-    rgba(79, 124, 255, 0.14) 62%,
-    transparent 72%
-  );
-  filter: blur(36px);
+  background-image: var(--hero-atmosphere-gradient);
+  filter: blur(var(--hero-atmosphere-blur));
 }
 
 /* Large italic serif headline treatment (Voyager2-style hero text). */
