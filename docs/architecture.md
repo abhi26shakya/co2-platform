@@ -40,15 +40,25 @@ Hotspots stored as JSONB — the structure will evolve with the model.
 - App Router route groups: `(marketing)` `(auth)` `(dashboard)`
 - React Query owns all server state; zustand covers local/UI state that
   needs to persist across components (e.g. the map camera/layer store).
-- CesiumJS (3D globe) for maps/heatmaps, loaded globally via `<script>`/
-  `<link>` tags in the root `app/layout.tsx` with the `beforeInteractive`
-  strategy — not the `react-leaflet` npm package. Basemap imagery comes from
-  CARTO/ArcGIS/OSM tile providers (no API key). Facility plumes render as
-  Cesium entities colored by the plume gradient; camera state syncs with the
-  zustand map store.
+- MapLibre GL JS (`maplibre-map.tsx`) for maps/heatmaps, driving both the flat
+  (mercator) and 3D/globe (`map.setProjection({type: "globe"})`) views from
+  one WebGL engine — not `react-leaflet`, and no longer a separate CesiumJS
+  engine (retired 2026-08-12; see KI-004 in `.claude/docs/KNOWN_ISSUES.md`
+  for why). Basemap imagery comes from CARTO/ArcGIS/OSM tile providers (no
+  API key). Facility plumes render as MapLibre GeoJSON layers (heatmap,
+  circle markers, contour rings, fill-extrusion columns, or an
+  interval-animated pulse) colored by the plume gradient; camera state syncs
+  with the zustand map store.
 - Design tokens in `globals.css`: dark-first "orbital observation" palette.
-  The amber→magenta plume gradient is reserved exclusively for
-  emission-intensity data — UI chrome never uses it.
+  The amber→magenta plume gradient is the canonical treatment for
+  emission-intensity data (map hotspots, upload progress, data-tied chart
+  series). A separate violet/magenta/blue "voyager" trio
+  (`--color-voyager-violet/magenta/blue`, added stage 16) is the general UI
+  chrome language instead — nav/sidebar active-states, glow accents, the
+  homepage hero globe — and is not data-exclusive the way the plume gradient
+  is. Fonts load via `next/font/google` in `app/layout.tsx`: Space Grotesk
+  (`--font-display`), Inter (`--font-sans`), IBM Plex Mono (`--font-mono`),
+  and Fraunces (`--font-serif`, italic hero headlines only).
 
 ## Build stages
 
@@ -115,11 +125,12 @@ Hotspots stored as JSONB — the structure will evolve with the model.
 
 - `GET /map/plants` (registry) and `GET /map/hotspots` (user's prediction
   hotspots flattened from JSONB, capped at the 500 most recent predictions).
-- Map: CesiumJS 3D globe on the CARTO dark basemap, client-only (Cesium needs
-  `window`; the library is loaded globally rather than as an npm import - see
-  the Frontend section above). Plants render as point entities in sensor
-  green; hotspots/plumes as Cesium entities colored by interpolating the
-  plume gradient with intensity - color IS the data. Layer toggles + legend.
+- Map: MapLibre GL JS on the CARTO dark basemap, client-only (touches
+  `window`/DOM APIs directly — see the Frontend section above). Mercator
+  (flat) and globe (3D) are the same engine, switched via
+  `map.setProjection`. Plants render as point features in sensor green;
+  hotspots/plumes as GeoJSON layers colored by interpolating the plume
+  gradient with intensity - color IS the data. Layer toggles + legend.
 - `GET /analytics`: monthly timeseries (date_trunc), 8-bucket histogram
   (width_bucket, max folded into last bucket), source counts, summary stats -
   all aggregation in SQL.
@@ -189,6 +200,48 @@ Known follow-ups from this stage are tracked in
 email has no scheduler behind it yet, GitHub/ORCID account linking is
 intentionally out of scope, and avatar storage's S3 migration is already
 covered by the existing `StorageBackend` abstraction.
+
+## Voyager2 redesign (stage 16)
+
+Frontend-only visual redesign toward a Dribbble reference ("Voyager2 -
+Explore Places 3d Globe"): a dark canvas, a glowing dot/particle 3D globe,
+italic serif headlines, and a minimal top nav. Rolled out in phases:
+
+- **Tokens + homepage hero**: real fonts wired via `next/font/google`
+  (previously the `--font-*` CSS vars were referenced everywhere but never
+  actually loaded, silently falling back to system fonts); new
+  violet/magenta/blue "voyager" chrome trio alongside the existing plume/
+  sensor/halo tokens (see Frontend section above). Homepage hero's old
+  CSS/SVG `OrbitField` backdrop replaced by `components/marketing/
+  particle-globe.tsx` - a real three.js/`@react-three/fiber` dot-matrix
+  globe with continent-biased density, slow rotation, and a limb glow,
+  mounted client-only via `particle-globe-loader.tsx`.
+- **App shell reskin**: `components/layout/sidebar.tsx` kept its structure
+  (left sidebar, collapse/focus-mode, mobile drawer) but active nav items
+  now get a violet→magenta gradient accent bar instead of a flat gray
+  highlight, and the logo sits in the same glowing icon-box treatment as
+  the public navbar.
+- **Maps globe polish**: `maplibre-map.tsx` gained sky/atmosphere styling
+  (`GLOBE_SKY`, applied via `map.setSky()` whenever globe/3D projection is
+  active) and a CSS starfield (`.map-starfield`, visible through the
+  canvas's `alpha:true` context beyond the globe's silhouette) plus a
+  blurred glow-halo layer under gas markers/pulse dots. Also fixed a real
+  gap found during QA: the default camera zoom (5) and reset-camera zoom
+  (3) were both too close-in for the globe's curvature/atmosphere to ever
+  be visible, so entering 3D now also eases the camera out to zoom ~0.5.
+- **Token rollout**: audited all remaining pages for non-token colors; only
+  `analytics/page.tsx` (hardcoded hex chart colors, a redundant
+  `resolvedTheme`-driven light/dark ternary now unnecessary since the CSS
+  vars already resolve per-theme) and `docs/page.tsx` (Tailwind default
+  `emerald`/`blue` badge colors instead of `sensor`/`halo`) needed changes.
+
+Known limitation: MapLibre GL's globe projection did not visibly render
+true spherical curvature during QA (the star/space boundary appeared as a
+straight line rather than an arc at low zoom) - the sky/atmosphere/
+starfield styling is confirmed active (`map.getSky()`), but whether the
+underlying globe camera is rendering a true sphere in this MapLibre
+version needs closer investigation if a more dramatic 3D globe look is
+wanted later.
 
 ## Post-v1 backlog
 

@@ -1,13 +1,17 @@
 import type { MapHotspot } from "@/types/geo";
 
-/** Shared by both map engines so gas-plume color/offset logic can't drift between the 3D (Cesium)
- *  and 2D (MapLibre) renderers. */
+/** Gas-plume color/offset logic shared by every render mode in maplibre-map.tsx (heatmap,
+ *  markers, contours, volume, animated), across both the flat and globe projections. */
 export interface PlumePoint {
   lat: number;
   lon: number;
   intensity: number;
   value: number;
   unit: string;
+  /** The real dispersion radius (meters) the backend estimated for this hotspot
+   *  (MapHotspot.radius_m) — how far its effect actually reaches on the ground, not a display
+   *  constant. Drives the density layer's footprint size in maplibre-map.tsx. */
+  radiusM: number;
 }
 
 export function hexToRgb(hex: string) {
@@ -84,6 +88,7 @@ export function getGasPlumes(gas: string, baseHotspots: MapHotspot[]): PlumePoin
       intensity: h.intensity,
       value: h.intensity * valueMultiplier,
       unit,
+      radiusM: h.radius_m,
     };
   });
 }

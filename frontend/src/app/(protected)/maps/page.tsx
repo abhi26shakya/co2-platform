@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Globe, Layers2, PenTool, Search as SearchIcon, Share2, Download as DownloadIcon } from "lucide-react";
+import { Globe, Layers2, Filter, PenTool, Download as DownloadIcon } from "lucide-react";
 
-import { useHotspots, usePlants } from "@/features/maps/hooks/use-geo";
+import { useAnalytics, useHotspots, usePlants } from "@/features/maps/hooks/use-geo";
 import { useMapStore } from "@/features/maps/store/map-store";
 import { useMapUiStore, type LeftPanelId } from "@/features/maps/store/map-ui-store";
 import { useDrawing } from "@/features/maps/hooks/use-drawing";
@@ -15,39 +15,31 @@ import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/
 import { DEFAULT_2D_BASEMAP, isBasemapSupported } from "@/features/maps/lib/basemap-catalog";
 import { buildShareLink } from "@/features/maps/lib/share-link";
 
+import { MapToolbar } from "@/features/maps/components/toolbar/map-toolbar";
+import { MapSidebar } from "@/features/maps/components/toolbar/map-sidebar";
+import { MapSummaryCard } from "@/features/maps/components/summary/map-summary-card";
 import { BasemapSelector } from "@/features/maps/components/layer-panel/basemap-selector";
 import { GasLayerControls } from "@/features/maps/components/layer-panel/gas-layer-controls";
+import { FacilityFilterPanel, applyFacilityFilters, toggleInSet } from "@/features/maps/components/layer-panel/facility-filter-panel";
 import { VisualizationModeSelector } from "@/features/maps/components/layer-panel/visualization-mode-selector";
 import { LayerToggleOverlay, type ShowLayers } from "@/features/maps/components/layer-panel/layer-toggle-overlay";
 import { CloudsOverlay } from "@/features/maps/components/layer-panel/clouds-overlay";
 import { IntensityLegend } from "@/features/maps/components/layer-panel/intensity-legend";
-import { FacilitySearch } from "@/features/maps/components/search/facility-search";
 import { DrawingToolbar } from "@/features/maps/components/gis-tools/drawing-toolbar";
 import { TimelineBar, type TimelinePeriod } from "@/features/maps/components/timeline/timeline-bar";
 import { ComparisonPanel, type ComparisonType } from "@/features/maps/components/comparison/comparison-panel";
 import { InspectorDrawer, type InspectedFacility } from "@/features/maps/components/facility-inspector/inspector-drawer";
-import { PlantInfoBar } from "@/features/maps/components/facility-inspector/plant-info-bar";
 import { AlertsBadge, type MapAlert } from "@/features/maps/components/alerts/alerts-badge";
 import { ExportMenu } from "@/features/maps/components/export-share/export-menu";
 import { ShareDialog } from "@/features/maps/components/export-share/share-dialog";
-import { ModeToggle } from "@/features/maps/components/map-controls/mode-toggle";
 
-// Cesium loads on client and requires script files in head; both engines are ssr:false since they
-// touch window/DOM APIs directly.
-const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/emission-map"), {
+// MapLibre touches window/DOM APIs directly and drives both the flat (mercator) and globe
+// projections — see KI-004 in KNOWN_ISSUES.md for why the separate Cesium 3D engine was retired.
+const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
   ssr: false,
   loading: () => (
     <div className="glass flex h-[40rem] items-center justify-center rounded-xl text-sm text-ground-400">
-      Loading Cesium 3D Globe...
-    </div>
-  ),
-});
-
-const MapLibreMap = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
-  ssr: false,
-  loading: () => (
-    <div className="glass flex h-[40rem] items-center justify-center rounded-xl text-sm text-ground-400">
-      Loading 2D map…
+      Loading map…
     </div>
   ),
 });
@@ -69,9 +61,10 @@ const DEFAULT_SHOW_LAYERS: ShowLayers = {
   clouds: false,
 };
 
-const RAIL_ITEMS: { id: Exclude<LeftPanelId, null>; label: string; icon: typeof SearchIcon }[] = [
+const PANEL_TABS: { id: Exclude<LeftPanelId, null>; label: string; icon: typeof Globe }[] = [
   { id: "layers", label: "Layers & Basemaps", icon: Globe },
   { id: "gas", label: "Gas Layers", icon: Layers2 },
+  { id: "filters", label: "Facility Filters", icon: Filter },
   { id: "gis", label: "GIS Tools", icon: PenTool },
   { id: "export", label: "Export", icon: DownloadIcon },
 ];
@@ -79,11 +72,16 @@ const RAIL_ITEMS: { id: Exclude<LeftPanelId, null>; label: string; icon: typeof 
 export default function MapPage() {
   const { data: plants = [] } = usePlants();
   const { data: hotspots = [] } = useHotspots();
+  const { data: analytics } = useAnalytics();
   const enrichedPlants = enrichPlants(plants);
+
+  const [filterCountries, setFilterCountries] = useState<Set<string>>(new Set());
+  const [filterFuelTypes, setFilterFuelTypes] = useState<Set<string>>(new Set());
+  const filteredPlants = applyFacilityFilters(enrichedPlants, filterCountries, filterFuelTypes);
 
   const { camera, activeBasemap, setActiveBasemap, mapMode, setMapMode, selectedFacility, setSelectedFacility, gases, toggleGas, setGasOpacity } =
     useMapStore();
-  const { activePanel, togglePanel, inspectorDrawerOpen, openInspectorDrawer, closeInspectorDrawer, alertsOpen, setAlertsOpen } =
+  const { activePanel, setActivePanel, inspectorDrawerOpen, openInspectorDrawer, closeInspectorDrawer, alertsOpen, setAlertsOpen } =
     useMapUiStore();
 
   const [visualizationMode, setVisualizationMode] = useState("volume3d");
@@ -96,6 +94,7 @@ export default function MapPage() {
   // engines all read this instead of the raw stored value.
   const effectiveBasemap = isBasemapSupported(activeBasemap, mapMode) ? activeBasemap : DEFAULT_2D_BASEMAP;
   const [showLayers, setShowLayers] = useState<ShowLayers>(DEFAULT_SHOW_LAYERS);
+  const [legendOpen, setLegendOpen] = useState(true);
 
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("monthly");
   const [sliderIndex, setSliderIndex] = useState(2);
@@ -103,6 +102,7 @@ export default function MapPage() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedYear, setSelectedYear] = useState(TIMELINE_TICKS.yearly[TIMELINE_TICKS.yearly.length - 1]);
 
   const [comparisonMode, setComparisonMode] = useState(false);
   const [comparePredictionA, setComparePredictionA] = useState("pred-1");
@@ -140,7 +140,7 @@ export default function MapPage() {
   const exportData = useMapExport(() => ({
     activeBasemap: effectiveBasemap,
     activeGasKeys: Object.keys(gases).filter((k) => gases[k].enabled),
-    plants: enrichedPlants.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, sector: p.sector, latest_prediction: p.latest_prediction })),
+    plants: filteredPlants.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, sector: p.sector, latest_prediction: p.latest_prediction })),
     hotspots: timeScaledHotspots.map((h) => ({ lat: h.lat, lon: h.lon, emission_tonnes_per_year: h.emission_tonnes_per_year })),
     inspectedFacilityName: inspectedFacility?.name ?? null,
   }));
@@ -154,13 +154,14 @@ export default function MapPage() {
     return () => clearInterval(interval);
   }, [isTimelinePlaying, playbackSpeed, ticks.length]);
 
-  const searchResults = buildSearchResults(enrichedPlants, hotspots, searchQuery);
-  const allFacilities = buildFacilityList(enrichedPlants);
+  const searchResults = buildSearchResults(filteredPlants, hotspots, searchQuery);
+  const allFacilities = buildFacilityList(filteredPlants);
 
   const handleSelectSearchResult = (result: MapSearchResult) => {
     setSelectedFacility(result.raw);
     setSearchQuery(result.name);
     setCameraTarget({ lat: result.lat, lon: result.lon });
+    openInspectorDrawer();
   };
 
   const handleSelectAlert = (alert: MapAlert) => {
@@ -168,6 +169,7 @@ export default function MapPage() {
     const match = enrichedPlants.find((p) => p.name.toLowerCase().includes(alert.facility.split(" ")[0].toLowerCase()));
     if (match) {
       setSelectedFacility(match);
+      openInspectorDrawer();
     }
     setAlertsOpen(false);
   };
@@ -180,200 +182,168 @@ export default function MapPage() {
     setShareLinkOpen(true);
   };
 
+  // Toolbar's fuel-type dropdown is a single-select convenience over the same filterFuelTypes
+  // state the (multi-select) Facility Filters flyout panel uses — picking one here replaces
+  // whatever the flyout had selected, rather than adding a second, disconnected filter mechanism.
+  const fuelTypeOptions = Array.from(new Set(enrichedPlants.map((p) => p.fuel_type))).sort();
+  const toolbarFuelType = filterFuelTypes.size === 1 ? Array.from(filterFuelTypes)[0] : "all";
+  const handleToolbarFuelType = (fuelType: string) => {
+    setFilterFuelTypes(fuelType === "all" ? new Set() : new Set([fuelType]));
+  };
+
+  // Toolbar's gas dropdown is a single-active-gas convenience (closer to Climate TRACE's "one gas
+  // at a time" UX) layered over the same multi-gas `gases` store the Gas Layers flyout panel
+  // fully controls — selecting one here enables it and disables the rest.
+  const enabledGasIds = Object.keys(gases).filter((k) => gases[k].enabled);
+  const toolbarPrimaryGas = enabledGasIds.length === 1 ? enabledGasIds[0] : (enabledGasIds[0] ?? "co2");
+  const handleToolbarPrimaryGas = (gasId: string) => {
+    Object.keys(gases).forEach((key) => {
+      if (key === gasId && !gases[key].enabled) toggleGas(key);
+      if (key !== gasId && gases[key].enabled) toggleGas(key);
+    });
+  };
+
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-medium" style={{ fontFamily: "var(--font-display)" }}>
-            Earth Observation Map
-          </h1>
-          <p className="mt-1 text-sm text-ground-400">Interactive 3D planetary tracking of industrial greenhouse gas emissions.</p>
-        </div>
+    <div className="mx-auto max-w-[100rem] space-y-3">
+      <MapToolbar
+        menuOpen={!!activePanel}
+        onToggleMenu={() => setActivePanel(activePanel ? null : "layers")}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchResults={searchResults}
+        allFacilities={allFacilities}
+        onSelectSearchResult={handleSelectSearchResult}
+        fuelTypeOptions={fuelTypeOptions}
+        selectedFuelType={toolbarFuelType}
+        onSelectFuelType={handleToolbarFuelType}
+        years={TIMELINE_TICKS.yearly}
+        selectedYear={selectedYear}
+        onSelectYear={setSelectedYear}
+        primaryGas={toolbarPrimaryGas}
+        onSelectPrimaryGas={handleToolbarPrimaryGas}
+        mapMode={mapMode}
+        onMapModeChange={setMapMode}
+        comparisonMode={comparisonMode}
+        onToggleComparison={() => setComparisonMode(!comparisonMode)}
+        onShare={triggerMapShare}
+      />
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setComparisonMode(!comparisonMode)}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
-              comparisonMode ? "bg-sensor/10 border-sensor text-sensor" : "border-ground-700 hover:border-ground-400 text-ground-300 bg-ground-900/60"
-            }`}
-          >
-            {comparisonMode ? "✕ Exit Comparison" : "Compare Predictions"}
-          </button>
-          <button
-            onClick={triggerMapShare}
-            className="flex items-center gap-2 rounded-lg bg-sensor text-ground-950 px-4 py-2 text-sm font-semibold transition-colors hover:bg-sensor/90 cursor-pointer shadow-lg shadow-sensor/5 shrink-0"
-          >
-            <Share2 className="h-4 w-4" /> Share Map
-          </button>
-        </div>
-      </div>
+      {comparisonMode && (
+        <ComparisonPanel
+          comparisonType={comparisonType}
+          onComparisonTypeChange={setComparisonType}
+          predictionA={comparePredictionA}
+          onPredictionAChange={setComparePredictionA}
+          predictionB={comparePredictionB}
+          onPredictionBChange={setComparePredictionB}
+        />
+      )}
 
-      {/* Primary workspace: collapsible icon rail + flyout panel + full-bleed map */}
-      <div className="flex items-start gap-3">
-        {/* Icon rail */}
-        <div className="glass flex flex-col gap-1.5 rounded-xl p-1.5 shrink-0">
-          {RAIL_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => togglePanel(id)}
-              title={label}
-              className={`h-9 w-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                activePanel === id ? "bg-sensor/10 text-sensor" : "text-ground-400 hover:bg-ground-850 hover:text-instrument"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
-        </div>
-
-        {/* Flyout panel — only one open at a time */}
-        {activePanel && (
-          <div className="w-72 shrink-0 space-y-4 animate-in fade-in slide-in-from-left-2 duration-150">
-            {activePanel === "layers" && (
-              <>
-                <BasemapSelector activeBasemap={effectiveBasemap} mapMode={mapMode} onSelect={setActiveBasemap} />
-                <LayerToggleOverlay showLayers={showLayers} onChange={setShowLayers} />
-              </>
-            )}
-            {activePanel === "gas" && <GasLayerControls gases={gases} onToggle={toggleGas} onOpacityChange={setGasOpacity} />}
-            {activePanel === "gis" && (
-              <DrawingToolbar
-                drawingMode={drawing.drawingMode}
-                onToggleTool={drawing.toggleDrawingMode}
-                liveMeasurement={drawing.liveMeasurement}
-                completedDrawings={drawing.completedDrawings}
-                onRemoveDrawing={drawing.removeDrawing}
-                onClearAll={drawing.clearDrawings}
-                onExportGeoJSON={() => {
-                  const result = drawing.exportGeoJSON();
-                  setGeoJsonExportNote(result.ok ? "Drawings exported as GeoJSON." : result.reason);
-                  setTimeout(() => setGeoJsonExportNote(null), 4000);
-                }}
-                exportStatus={geoJsonExportNote}
-              />
-            )}
-            {activePanel === "export" && (
-              <ExportMenu activeFormat={exportData.activeFormat} progress={exportData.progress} history={exportData.history} onExport={exportData.triggerExport} />
-            )}
-          </div>
-        )}
-
-        {/* Map + timeline column */}
-        <div className="flex-1 space-y-4 min-w-0">
-          {comparisonMode && (
-            <ComparisonPanel
-              comparisonType={comparisonType}
-              onComparisonTypeChange={setComparisonType}
-              predictionA={comparePredictionA}
-              onPredictionAChange={setComparePredictionA}
-              predictionB={comparePredictionB}
-              onPredictionBChange={setComparePredictionB}
-            />
+      <div className="relative h-[42rem]">
+        <MapSidebar
+          open={!!activePanel}
+          onClose={() => setActivePanel(null)}
+          activePanel={activePanel}
+          onSelectPanel={setActivePanel}
+          sections={PANEL_TABS}
+        >
+          {activePanel === "layers" && (
+            <>
+              <BasemapSelector activeBasemap={effectiveBasemap} mapMode={mapMode} onSelect={setActiveBasemap} />
+              <LayerToggleOverlay showLayers={showLayers} onChange={setShowLayers} />
+            </>
           )}
-
-          <div className="relative h-[42rem]">
-            {mapMode === "2d" ? (
-              <MapLibreMap
-                plants={enrichedPlants}
-                hotspots={timeScaledHotspots}
-                showPlants={showLayers.plants}
-                showHotspots={showLayers.heatmap}
-                selectedMode={effectiveVisualizationMode}
-                activeBasemap={effectiveBasemap}
-                onSelectFacility={(fac) => {
-                  setSelectedFacility(fac);
-                  if (fac.lat != null && fac.lon != null) {
-                    setCameraTarget({ lat: fac.lat, lon: fac.lon });
-                  }
-                }}
-                drawingMode={drawing.drawingMode}
-                comparisonMode={comparisonMode}
-                showLayers={showLayers}
-                onDrawingComplete={drawing.addDrawing}
-                onLiveMeasurement={drawing.setLiveMeasurement}
-                clearTrigger={drawing.clearTrigger}
-                comparisonType={comparisonType}
-                cameraTarget={cameraTarget}
-              />
-            ) : (
-              <EmissionMap
-                plants={enrichedPlants}
-                hotspots={timeScaledHotspots}
-                showPlants={showLayers.plants}
-                showHotspots={showLayers.heatmap}
-                selectedMode={effectiveVisualizationMode}
-                activeBasemap={effectiveBasemap}
-                onSelectFacility={(fac) => {
-                  setSelectedFacility(fac);
-                  if (fac.lat != null && fac.lon != null) {
-                    setCameraTarget({ lat: fac.lat, lon: fac.lon });
-                  }
-                }}
-                drawingMode={drawing.drawingMode}
-                comparisonMode={comparisonMode}
-                showLayers={showLayers}
-                onDrawingComplete={drawing.addDrawing}
-                onLiveMeasurement={drawing.setLiveMeasurement}
-                clearTrigger={drawing.clearTrigger}
-                comparisonType={comparisonType}
-                cameraTarget={cameraTarget}
-              />
-            )}
-
-            {/* Top control bar: search + render mode, always visible above the map. Kept to a
-                single row (no wrap) so it can never grow tall enough to collide with ModeToggle
-                anchored at top-20 below it — the search box shrinks on narrow viewports instead. */}
-            <div className="absolute top-4 left-4 right-4 z-20 flex items-start gap-2">
-              <div className="min-w-0 max-w-80 flex-1">
-                <FacilitySearch
-                  query={searchQuery}
-                  onQueryChange={setSearchQuery}
-                  results={searchResults}
-                  onSelect={handleSelectSearchResult}
-                  allFacilities={allFacilities}
-                />
-              </div>
-              <div className="shrink-0">
-                <VisualizationModeSelector
-                  variant="compact"
-                  selectedMode={effectiveVisualizationMode}
-                  mapMode={mapMode}
-                  onSelect={setVisualizationMode}
-                />
-              </div>
-            </div>
-
-            <ModeToggle mode={mapMode} onChange={setMapMode} />
-            <AlertsBadge open={alertsOpen} onToggle={() => setAlertsOpen(!alertsOpen)} onSelectAlert={handleSelectAlert} />
-            <IntensityLegend timeFactor={timeFactor} />
-            {showLayers.clouds && <CloudsOverlay />}
-            <PlantInfoBar
-              facility={inspectedFacility}
-              onOpenDetails={openInspectorDrawer}
+          {activePanel === "gas" && <GasLayerControls gases={gases} onToggle={toggleGas} onOpacityChange={setGasOpacity} />}
+          {activePanel === "filters" && (
+            <FacilityFilterPanel
+              plants={enrichedPlants}
+              selectedCountries={filterCountries}
+              selectedFuelTypes={filterFuelTypes}
+              onToggleCountry={(country) => setFilterCountries((prev) => toggleInSet(prev, country))}
+              onToggleFuelType={(fuelType) => setFilterFuelTypes((prev) => toggleInSet(prev, fuelType))}
               onClear={() => {
-                setSelectedFacility(null);
-                closeInspectorDrawer();
+                setFilterCountries(new Set());
+                setFilterFuelTypes(new Set());
               }}
             />
-          </div>
+          )}
+          {activePanel === "gis" && (
+            <DrawingToolbar
+              drawingMode={drawing.drawingMode}
+              onToggleTool={drawing.toggleDrawingMode}
+              liveMeasurement={drawing.liveMeasurement}
+              completedDrawings={drawing.completedDrawings}
+              onRemoveDrawing={drawing.removeDrawing}
+              onClearAll={drawing.clearDrawings}
+              onExportGeoJSON={() => {
+                const result = drawing.exportGeoJSON();
+                setGeoJsonExportNote(result.ok ? "Drawings exported as GeoJSON." : result.reason);
+                setTimeout(() => setGeoJsonExportNote(null), 4000);
+              }}
+              exportStatus={geoJsonExportNote}
+            />
+          )}
+          {activePanel === "export" && (
+            <ExportMenu activeFormat={exportData.activeFormat} progress={exportData.progress} history={exportData.history} onExport={exportData.triggerExport} />
+          )}
+        </MapSidebar>
 
-          <TimelineBar
-            period={timelinePeriod}
-            onPeriodChange={(p) => {
-              setTimelinePeriod(p);
-              setSliderIndex(0);
-            }}
-            ticks={ticks}
-            sliderIndex={sliderIndex}
-            onSliderChange={setSliderIndex}
-            isPlaying={isTimelinePlaying}
-            onTogglePlay={() => setIsTimelinePlaying(!isTimelinePlaying)}
-            playbackSpeed={playbackSpeed}
-            onSpeedChange={setPlaybackSpeed}
+        <MapCanvas
+          plants={filteredPlants}
+          hotspots={timeScaledHotspots}
+          showPlants={showLayers.plants}
+          showHotspots={showLayers.heatmap}
+          selectedMode={effectiveVisualizationMode}
+          activeBasemap={effectiveBasemap}
+          onSelectFacility={(fac) => {
+            setSelectedFacility(fac);
+            if (fac.lat != null && fac.lon != null) {
+              setCameraTarget({ lat: fac.lat, lon: fac.lon });
+            }
+            openInspectorDrawer();
+          }}
+          drawingMode={drawing.drawingMode}
+          comparisonMode={comparisonMode}
+          showLayers={showLayers}
+          onDrawingComplete={drawing.addDrawing}
+          onLiveMeasurement={drawing.setLiveMeasurement}
+          clearTrigger={drawing.clearTrigger}
+          comparisonType={comparisonType}
+          cameraTarget={cameraTarget}
+          legendOn={legendOpen}
+          onToggleLegend={() => setLegendOpen((v) => !v)}
+        />
+
+        <div className="absolute top-4 right-4 z-20">
+          <VisualizationModeSelector
+            variant="compact"
+            selectedMode={effectiveVisualizationMode}
+            mapMode={mapMode}
+            onSelect={setVisualizationMode}
           />
         </div>
+
+        <AlertsBadge open={alertsOpen} onToggle={() => setAlertsOpen(!alertsOpen)} onSelectAlert={handleSelectAlert} />
+        {legendOpen && <IntensityLegend gases={gases} showGasLayer={showLayers.heatmap} />}
+        {showLayers.clouds && <CloudsOverlay />}
+
+        <MapSummaryCard analytics={analytics} sourceCount={filteredPlants.length} periodLabel={selectedYear} />
       </div>
+
+      <TimelineBar
+        period={timelinePeriod}
+        onPeriodChange={(p) => {
+          setTimelinePeriod(p);
+          setSliderIndex(0);
+        }}
+        ticks={ticks}
+        sliderIndex={sliderIndex}
+        onSliderChange={setSliderIndex}
+        isPlaying={isTimelinePlaying}
+        onTogglePlay={() => setIsTimelinePlaying(!isTimelinePlaying)}
+        playbackSpeed={playbackSpeed}
+        onSpeedChange={setPlaybackSpeed}
+      />
 
       <InspectorDrawer
         open={inspectorDrawerOpen}

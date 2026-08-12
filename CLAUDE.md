@@ -130,15 +130,33 @@ pydantic-settings). Copy `.env.example` → `.env` to get started.
   `src/lib/auth-tokens.ts`.
 - Next.js rewrites bake `BACKEND_URL` (from `.env.local`) at build time —
   relevant when changing where the backend is hosted.
-- **Maps**: `features/maps/components/map/emission-map.tsx` drives
-  **CesiumJS** (3D globe), loaded as global `<script>`/`<link>` tags in the
-  root `app/layout.tsx` with `beforeInteractive` strategy — not the
-  `leaflet`/`react-leaflet` npm packages, which are still dependencies but
-  effectively legacy at this point.
+- **Maps**: `features/maps/components/map-canvas/maplibre-map.tsx` drives a
+  single **MapLibre GL** engine for both 2D and 3D — 3D is MapLibre's globe
+  projection (`map.setProjection({type: "globe"})`), not a separate renderer.
+  CesiumJS was retired (see KI-004 in `.claude/docs/KNOWN_ISSUES.md`) and the
+  `leaflet`/`react-leaflet` npm packages are legacy/unused. Entering 3D mode
+  applies a violet-toned `map.setSky()` atmosphere (`GLOBE_SKY` in that file)
+  and eases the camera to a planetary-view zoom/pitch so the globe and its
+  atmosphere are actually visible — reapplied after every basemap swap since
+  `setStyle()` resets it.
 - Design tokens live in `globals.css`: a dark-first "orbital observation"
-  palette. The amber→magenta plume gradient is reserved **exclusively** for
-  emission-intensity data (map hotspots, upload progress while data is
-  entering the system) — never use it for general UI chrome.
+  palette. The amber→magenta plume gradient (`--color-plume-low/high`) is the
+  canonical treatment for emission-intensity data (map hotspots, upload
+  progress, chart series tied to real values). A separate violet/magenta/blue
+  "voyager" trio (`--color-voyager-violet/magenta/blue`) is the general UI
+  chrome language (nav active-states, glow accents, the homepage hero globe) —
+  introduced for a Dribbble-inspired ("Voyager2") redesign; unlike the plume
+  gradient it is *not* data-exclusive. `--color-sensor`/`--color-halo` remain
+  for status/accent use (success, confidence, secondary accent) alongside
+  both. Fonts are loaded via `next/font/google` in `app/layout.tsx`: Space
+  Grotesk (`--font-display`, UI chrome), Inter (`--font-sans`, body), IBM
+  Plex Mono (`--font-mono`, data readouts), and Fraunces (`--font-serif`,
+  reserved for large italic hero headlines only — see `.headline-serif-italic`
+  in `globals.css`). The homepage hero's glowing dot-globe is a real WebGL
+  scene (`components/marketing/particle-globe.tsx`, three.js +
+  `@react-three/fiber`), mounted client-only via
+  `components/marketing/particle-globe-loader.tsx` since `next/dynamic`'s
+  `ssr:false` isn't allowed directly inside a Server Component page.
 
 ### ML service (`ml-service/app/`)
 

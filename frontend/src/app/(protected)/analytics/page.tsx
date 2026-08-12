@@ -22,8 +22,8 @@ import {
 
 import { useSettings } from "@/providers/providers/settings-provider";
 
-const PLUME_LO = "#f5a623";
-const PLUME_HI = "#e64980";
+const PLUME_LO = "var(--color-plume-low)";
+const PLUME_HI = "var(--color-plume-high)";
 
 async function downloadCsv(setBusy: (v: boolean) => void) {
   setBusy(true);
@@ -46,20 +46,22 @@ async function downloadCsv(setBusy: (v: boolean) => void) {
 
 export default function AnalyticsPage() {
   const { data, isLoading } = useAnalytics();
-  const { formatEmission, aiUnits, resolvedTheme } = useSettings();
+  const { formatEmission, aiUnits } = useSettings();
   const [busy, setBusy] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
 
   const hasData = (data?.total_predictions ?? 0) > 0;
 
-  const AXIS = resolvedTheme === "light" ? "#475569" : "#64748b";
-  const GRID = resolvedTheme === "light" ? "#cbd5e1" : "#1c2942";
+  // CSS vars already resolve per-theme via globals.css's html.light override,
+  // so these no longer need a resolvedTheme-driven ternary.
+  const AXIS = "var(--color-ground-400)";
+  const GRID = "var(--color-ground-700)";
   const tooltipStyle = {
-    backgroundColor: resolvedTheme === "light" ? "#ffffff" : "#0b1220",
-    border: `1px solid ${resolvedTheme === "light" ? "#cbd5e1" : "#1c2942"}`,
+    backgroundColor: "var(--color-ground-900)",
+    border: "1px solid var(--color-ground-700)",
     borderRadius: 8,
     fontSize: 12,
-    color: resolvedTheme === "light" ? "#0f172a" : "#e6edf7",
+    color: "var(--color-instrument)",
   };
 
   const formattedPeak = data?.max_emission != null
@@ -192,7 +194,7 @@ export default function AnalyticsPage() {
                     <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="range" stroke={AXIS} fontSize={11} tickLine={false} />
                     <YAxis stroke={AXIS} fontSize={11} tickLine={false} allowDecimals={false} width={32} />
-                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#121b2e" }} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--color-ground-800)" }} />
                     <Bar dataKey="count" fill="url(#plume)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

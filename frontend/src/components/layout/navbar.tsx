@@ -86,7 +86,11 @@ export function Navbar() {
                   >
                     {link.name}
                     {isActive && (
-                      <span className="absolute inset-x-3 -bottom-px h-px bg-sensor/70" aria-hidden />
+                      <span
+                        className="absolute inset-x-3 -bottom-px h-px"
+                        style={{ backgroundColor: "var(--color-voyager-magenta)", opacity: 0.7 }}
+                        aria-hidden
+                      />
                     )}
                   </Link>
                 );

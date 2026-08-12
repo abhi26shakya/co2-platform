@@ -67,38 +67,48 @@ export function InspectorDrawer({ open, onClose, facility, timelinePeriod, slide
               </div>
               <div>
                 <dt className="text-ground-400">Country:</dt>
-                <dd className="text-instrument mt-0.5">{facility.country || "India"}</dd>
+                <dd className="text-instrument mt-0.5">{facility.country || "—"}</dd>
               </div>
               <div>
                 <dt className="text-ground-400">Latest Prediction:</dt>
-                <dd className="font-mono text-sensor font-bold mt-0.5">{facility.latest_prediction}</dd>
+                <dd className="font-mono text-sensor font-bold mt-0.5">{facility.latest_prediction || "—"}</dd>
               </div>
               <div>
                 <dt className="text-ground-400">AI Confidence:</dt>
-                <dd className="font-mono text-instrument mt-0.5">{facility.confidence || "91%"}</dd>
+                <dd className="font-mono text-instrument mt-0.5">{facility.confidence || "—"}</dd>
               </div>
               <div>
                 <dt className="text-ground-400">Predicted Gases:</dt>
                 <dd className="text-instrument mt-0.5 flex flex-wrap gap-1">
-                  {(facility.predicted_gases || ["CO₂", "NO₂"]).map((g) => (
-                    <span key={g} className="px-1 py-0.5 bg-ground-850 rounded text-[9px] font-mono">
-                      {g}
-                    </span>
-                  ))}
+                  {facility.predicted_gases && facility.predicted_gases.length > 0 ? (
+                    facility.predicted_gases.map((g) => (
+                      <span key={g} className="px-1 py-0.5 bg-ground-850 rounded text-[9px] font-mono">
+                        {g}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-ground-500">—</span>
+                  )}
                 </dd>
               </div>
               <div>
                 <dt className="text-ground-400">Trend Status:</dt>
                 <dd className="font-mono text-instrument mt-0.5 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3 text-red-400" />
-                  <span>{facility.trend || "+2.4% (increasing)"}</span>
+                  {facility.trend ? (
+                    <>
+                      <TrendingUp className="h-3 w-3 text-red-400" />
+                      <span>{facility.trend}</span>
+                    </>
+                  ) : (
+                    <span className="text-ground-500">No trend data</span>
+                  )}
                 </dd>
               </div>
             </dl>
 
             <div className="border-t border-ground-800 pt-3 space-y-2">
               <span className="text-[10px] uppercase font-bold text-ground-450 tracking-wider">
-                Emission Trend ({timelinePeriod})
+                Emission Trend ({timelinePeriod}) — simulated variation, not measured history
               </span>
               <div className="h-20 w-full bg-ground-950/40 rounded border border-ground-800/60 p-1">
                 <ResponsiveContainer width="100%" height="100%">

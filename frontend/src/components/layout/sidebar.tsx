@@ -110,7 +110,9 @@ export function Sidebar() {
         inert={focusMode || undefined}
       >
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <Satellite className="h-5 w-5 shrink-0 text-sensor" aria-hidden />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border neon-logo-animate">
+            <Satellite className="h-4 w-4 text-instrument" aria-hidden />
+          </div>
           <span
             className={cn(
               "overflow-hidden whitespace-nowrap text-lg font-medium transition-all duration-200",
@@ -168,14 +170,29 @@ export function Sidebar() {
                         href={href}
                         aria-current={isActive ? "page" : undefined}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                          "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                           rail && "lg:justify-center lg:px-2",
                           isActive
                             ? "bg-ground-800 text-instrument"
                             : "text-ground-400 hover:bg-ground-800/60 hover:text-instrument"
                         )}
                       >
-                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        {isActive && (
+                          <span
+                            aria-hidden
+                            className="absolute inset-y-1 left-0 w-0.5 rounded-full"
+                            style={{
+                              background:
+                                "linear-gradient(180deg, var(--color-voyager-violet), var(--color-voyager-magenta))",
+                              boxShadow: "0 0 8px 0 var(--color-voyager-magenta)",
+                            }}
+                          />
+                        )}
+                        <Icon
+                          className="h-4 w-4 shrink-0"
+                          style={isActive ? { color: "var(--color-voyager-magenta)" } : undefined}
+                          aria-hidden
+                        />
                         <span
                           className={cn(
                             "overflow-hidden whitespace-nowrap transition-all duration-200",

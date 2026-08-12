@@ -2,12 +2,13 @@
 
 /*
   Design tokens - "orbital observation" palette.
-  Dark-first: deep pre-dawn navy ground, instrument-white text,
-  and a plume gradient (amber -> magenta) reserved EXCLUSIVELY for
-  emission-intensity data. UI chrome never uses plume colors, so
-  wherever the eye sees warmth, it is seeing data. Chrome accents
-  (glass, glows, buttons) instead draw from --color-sensor and
-  --color-halo, both theme-aware and free of plume hues.
+  Dark-first: deep pre-dawn navy ground, instrument-white text.
+  The amber -> magenta plume gradient remains the canonical treatment for
+  emission-intensity data, but is no longer chrome-exclusive: a
+  violet/magenta/blue "voyager" glow trio (see below) is the general UI
+  chrome language (nav, hero, buttons), inspired by the Voyager2 dark-globe
+  reference. --color-sensor / --color-halo remain for status/accent use
+  (success, confidence, secondary accent) alongside the new trio.
 */
 @theme {
   --color-ground-950: #090d15;   /* page background */
@@ -23,6 +24,11 @@
   --color-alert: #f87171;        /* errors */
   --color-warn: #fbbf24;         /* warnings (chrome-safe, distinct from plume-low) */
 
+  /* Voyager glow trio - general UI chrome (nav, hero, globe, buttons). */
+  --color-voyager-violet: #7c5cff;
+  --color-voyager-magenta: #e64980; /* shared anchor with --color-plume-high */
+  --color-voyager-blue: #4f7cff;
+
   /* Glass surface system - theme-aware via var() overrides below */
   --glass-surface: rgba(19, 26, 41, 0.55);
   --glass-surface-strong: rgba(14, 20, 32, 0.78);
@@ -33,6 +39,7 @@
   --font-display: var(--font-space-grotesk), sans-serif;
   --font-sans: var(--font-inter), sans-serif;
   --font-mono: var(--font-plex-mono), monospace;
+  --font-serif: var(--font-fraunces), serif;
 }
 
 :root {
@@ -173,7 +180,7 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* The plume gradient - only ever applied to emission data. */
+/* The plume gradient - canonical treatment for emission data. */
 .plume-gradient {
   background-image: linear-gradient(90deg, var(--color-plume-low), var(--color-plume-high));
 }
@@ -184,46 +191,77 @@ body {
   color: transparent;
 }
 
-/* Neon Glow Animations */
+/* Voyager chrome glow - hero backdrops, globe limb glow. */
+.hero-atmosphere {
+  background-image: radial-gradient(
+    closest-side,
+    rgba(124, 92, 255, 0.35),
+    rgba(230, 73, 128, 0.2) 45%,
+    rgba(79, 124, 255, 0.12) 70%,
+    transparent 85%
+  );
+  filter: blur(60px);
+}
+
+/* Large italic serif headline treatment (Voyager2-style hero text). */
+.headline-serif-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Deep-space starfield - sits behind the maps globe canvas (alpha:true context)
+   so the area beyond the globe's silhouette reads as open space rather than
+   flat black. Tiled radial-gradient dots, GPU-cheap, no image asset. */
+.map-starfield {
+  background-color: #05040c;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(238, 242, 249, 0.9), transparent),
+    radial-gradient(1px 1px at 65% 15%, rgba(238, 242, 249, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 80% 60%, rgba(238, 242, 249, 0.8), transparent),
+    radial-gradient(1px 1px at 40% 80%, rgba(238, 242, 249, 0.6), transparent),
+    radial-gradient(1px 1px at 10% 70%, rgba(238, 242, 249, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 90% 35%, rgba(238, 242, 249, 0.7), transparent),
+    radial-gradient(1px 1px at 55% 50%, rgba(238, 242, 249, 0.5), transparent),
+    radial-gradient(1px 1px at 30% 10%, rgba(238, 242, 249, 0.6), transparent),
+    radial-gradient(1px 1px at 75% 85%, rgba(238, 242, 249, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 15% 90%, rgba(238, 242, 249, 0.6), transparent);
+  background-repeat: repeat;
+  background-size: 220px 220px;
+}
+
+/* Neon Glow Animations - voyager violet/magenta/blue chrome cycle. */
 @keyframes neon-border {
   0%, 100% {
-    border-color: rgba(52, 211, 153, 0.6);
-    box-shadow: 0 0 15px rgba(52, 211, 153, 0.25), inset 0 0 5px rgba(52, 211, 153, 0.1);
-  }
-  25% {
-    border-color: rgba(96, 165, 250, 0.6);
-    box-shadow: 0 0 15px rgba(96, 165, 250, 0.25), inset 0 0 5px rgba(96, 165, 250, 0.1);
+    border-color: rgba(124, 92, 255, 0.6);
+    box-shadow: 0 0 15px rgba(124, 92, 255, 0.25), inset 0 0 5px rgba(124, 92, 255, 0.1);
   }
   50% {
-    border-color: rgba(244, 114, 182, 0.6);
-    box-shadow: 0 0 15px rgba(244, 114, 182, 0.25), inset 0 0 5px rgba(244, 114, 182, 0.1);
+    border-color: rgba(230, 73, 128, 0.6);
+    box-shadow: 0 0 15px rgba(230, 73, 128, 0.25), inset 0 0 5px rgba(230, 73, 128, 0.1);
   }
   75% {
-    border-color: rgba(251, 191, 36, 0.6);
-    box-shadow: 0 0 15px rgba(251, 191, 36, 0.25), inset 0 0 5px rgba(251, 191, 36, 0.1);
+    border-color: rgba(79, 124, 255, 0.6);
+    box-shadow: 0 0 15px rgba(79, 124, 255, 0.25), inset 0 0 5px rgba(79, 124, 255, 0.1);
   }
 }
 
 @keyframes neon-logo {
   0%, 100% {
-    background-color: rgba(52, 211, 153, 0.1);
-    border-color: rgba(52, 211, 153, 0.4);
-    box-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
-  }
-  25% {
-    background-color: rgba(96, 165, 250, 0.1);
-    border-color: rgba(96, 165, 250, 0.4);
-    box-shadow: 0 0 10px rgba(96, 165, 250, 0.2);
+    background-color: rgba(124, 92, 255, 0.1);
+    border-color: rgba(124, 92, 255, 0.4);
+    box-shadow: 0 0 10px rgba(124, 92, 255, 0.2);
   }
   50% {
-    background-color: rgba(244, 114, 182, 0.1);
-    border-color: rgba(244, 114, 182, 0.4);
-    box-shadow: 0 0 10px rgba(244, 114, 182, 0.2);
+    background-color: rgba(230, 73, 128, 0.1);
+    border-color: rgba(230, 73, 128, 0.4);
+    box-shadow: 0 0 10px rgba(230, 73, 128, 0.2);
   }
   75% {
-    background-color: rgba(251, 191, 36, 0.1);
-    border-color: rgba(251, 191, 36, 0.4);
-    box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);
+    background-color: rgba(79, 124, 255, 0.1);
+    border-color: rgba(79, 124, 255, 0.4);
+    box-shadow: 0 0 10px rgba(79, 124, 255, 0.2);
   }
 }
 

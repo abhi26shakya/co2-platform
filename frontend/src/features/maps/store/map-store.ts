@@ -16,9 +16,9 @@ interface GasConfig {
 export type MapMode = "2d" | "3d";
 
 /** Whatever was last clicked/selected on the map — a plant (PlantOut-shaped) or a synthetic gas
- *  plume/hotspot entity (see the `entityMeta` shapes in emission-map.tsx / maplibre-map.tsx),
- *  which don't share a single schema. All fields optional and no index signature, so concrete
- *  shapes like EnrichedPlant/PlantOut remain structurally assignable here. */
+ *  plume/hotspot entity (see the `metadata` shape built in maplibre-map.tsx), which don't share a
+ *  single schema. All fields optional and no index signature, so concrete shapes like
+ *  EnrichedPlant/PlantOut remain structurally assignable here. */
 export interface SelectedFacility {
   id?: string;
   name?: string;
@@ -53,11 +53,13 @@ interface MapStore {
   setGasOpacity: (gas: string, opacity: number) => void;
 }
 
+// pitch uses MapLibre's convention (0 = straight down, up to maxPitch) now that a single engine
+// (globe projection for 3D, mercator for 2D) owns the camera — see maplibre-map.tsx.
 const DEFAULT_CAMERA = {
   lat: 24.0,
   lon: 80.0,
   zoom: 5.0,
-  pitch: -45.0,
+  pitch: 0.0,
   bearing: 0.0,
 };
 

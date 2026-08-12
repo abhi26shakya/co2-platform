@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type LeftPanelId = "layers" | "gas" | "gis" | "export" | null;
+export type LeftPanelId = "layers" | "gas" | "filters" | "gis" | "export" | null;
 
 interface MapUiStore {
   /** Only one left-rail panel open at a time; null means the rail is collapsed to icons only. */

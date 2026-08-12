@@ -1,6 +1,6 @@
 /**
- * Raster tile URL templates shared by both map engines (Cesium 3D and MapLibre 2D) so basemap
- * selection looks visually consistent regardless of which engine is active.
+ * Raster tile URL templates for the map's basemap selector, shared across both the flat
+ * (mercator) and globe projections so basemap choice looks consistent in either mode.
  */
 export const BASEMAP_TILES: Record<string, string[]> = {
   dark: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],

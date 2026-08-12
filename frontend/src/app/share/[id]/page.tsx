@@ -15,8 +15,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Dynamic Cesium map import for client-only rendering
-const EmissionMap = dynamic(() => import("@/features/maps/components/map-canvas/emission-map"), {
+// Dynamic MapLibre import for client-only rendering (touches window/DOM APIs directly).
+const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[24rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">
@@ -292,7 +292,7 @@ export default function PublicSharePage() {
                   <MapPin className="h-4 w-4 text-sensor" /> Geospatial Prediction Map
                 </h3>
                 <div className="h-[26rem] w-full rounded-lg overflow-hidden border border-ground-700">
-                  <EmissionMap
+                  <MapCanvas
                     plants={[]}
                     hotspots={hotspotsData}
                     showPlants={false}

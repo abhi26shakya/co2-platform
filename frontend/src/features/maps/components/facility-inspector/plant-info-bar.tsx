@@ -22,7 +22,7 @@ export function PlantInfoBar({ facility, onOpenDetails, onClear }: Props) {
           <h4 className="mt-0.5 text-sm font-semibold text-sensor truncate">{facility.name}</h4>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-ground-400 font-mono">
             <span>{facility.industry || facility.sector || "Energy Production"}</span>
-            <span>{facility.country || "India"}</span>
+            <span>{facility.country || "—"}</span>
             {facility.lat != null && facility.lon != null && (
               <span>
                 {facility.lat.toFixed(3)}, {facility.lon.toFixed(3)}

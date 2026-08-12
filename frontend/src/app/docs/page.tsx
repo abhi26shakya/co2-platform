@@ -204,7 +204,7 @@ export default function DocsPage() {
               <div className="space-y-4">
                 <div className="rounded-xl border border-ground-700 bg-ground-900/30 p-5">
                   <div className="flex items-center gap-3">
-                    <span className="readout rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
+                    <span className="readout rounded bg-sensor/10 border border-sensor/20 text-sensor text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
                     <span className="font-mono text-xs text-instrument">/api/v1/auth/login</span>
                   </div>
                   <p className="mt-2 text-xs text-ground-400">
@@ -214,7 +214,7 @@ export default function DocsPage() {
 
                 <div className="rounded-xl border border-ground-700 bg-ground-900/30 p-5">
                   <div className="flex items-center gap-3">
-                    <span className="readout rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
+                    <span className="readout rounded bg-sensor/10 border border-sensor/20 text-sensor text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
                     <span className="font-mono text-xs text-instrument">/api/v1/uploads</span>
                   </div>
                   <p className="mt-2 text-xs text-ground-400">
@@ -224,7 +224,7 @@ export default function DocsPage() {
 
                 <div className="rounded-xl border border-ground-700 bg-ground-900/30 p-5">
                   <div className="flex items-center gap-3">
-                    <span className="readout rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
+                    <span className="readout rounded bg-sensor/10 border border-sensor/20 text-sensor text-[10px] px-2 py-0.5 font-bold font-mono">POST</span>
                     <span className="font-mono text-xs text-instrument">/api/v1/predictions</span>
                   </div>
                   <p className="mt-2 text-xs text-ground-400">
@@ -234,7 +234,7 @@ export default function DocsPage() {
 
                 <div className="rounded-xl border border-ground-700 bg-ground-900/30 p-5">
                   <div className="flex items-center gap-3">
-                    <span className="readout rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] px-2 py-0.5 font-bold font-mono">GET</span>
+                    <span className="readout rounded bg-halo/10 border border-halo/20 text-halo text-[10px] px-2 py-0.5 font-bold font-mono">GET</span>
                     <span className="font-mono text-xs text-instrument">/api/v1/analytics</span>
                   </div>
                   <p className="mt-2 text-xs text-ground-400">

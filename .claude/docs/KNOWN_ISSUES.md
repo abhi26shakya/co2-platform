@@ -324,6 +324,23 @@ logs/function logs on vercel.com for anything unusual, and try the
 different-network test above to isolate ISP/routing vs. a genuine
 Vercel-deployment issue.
 
+**Status: Resolved (2026-08-12)** — Map Section Redesign (Climate TRACE-inspired
+overhaul), Phase 1. Rather than continue root-causing the Vercel-specific crash,
+the separate CesiumJS 3D engine (`emission-map.tsx`, loaded via global
+`<script>`/`<link>` tags in `app/layout.tsx`) was retired outright. MapLibre GL
+JS `^6.0.0` (already the 2D engine) ships native globe projection
+(`map.setProjection({type: "globe"})`), so `maplibre-map.tsx` now drives both
+the flat and 3D/globe views from one WebGL engine. This removes the crashing
+code path entirely — there is no Cesium runtime left to crash — along with the
+untyped `any` Cesium surface, the dual-engine prop duplication between
+`emission-map.tsx`/`maplibre-map.tsx`, and the Cesium-vs-MapLibre pitch
+convention carve-out in `map-store.ts`. The two Cesium-only visualization
+modes (`volume3d` extruded columns, `animated` pulsing plumes) were ported to
+MapLibre `fill-extrusion` and an interval-driven circle-paint update,
+respectively. Verification: manual smoke test in both projections against a
+local `next dev` server; production Vercel verification (the original repro
+environment) is a follow-up before calling this fully closed.
+
 ---
 
 # High Priority Issues

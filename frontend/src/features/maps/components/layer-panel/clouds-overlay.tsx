@@ -1,8 +1,7 @@
 /**
- * "Simulated Clouds" toggle from LayerToggleOverlay — a decorative, engine-agnostic drift
- * animation rendered once above whichever map canvas (Cesium or MapLibre) is mounted, rather
- * than duplicated per-engine. Not real cloud imagery — the layer is explicitly named "simulated"
- * in the spec.
+ * "Simulated Clouds" toggle from LayerToggleOverlay — a decorative drift animation rendered once
+ * above the map canvas. Not real cloud imagery — the layer is explicitly named "simulated" in
+ * the spec.
  */
 export function CloudsOverlay() {
   return (

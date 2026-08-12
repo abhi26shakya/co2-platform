@@ -3,8 +3,9 @@ import type { MapMode } from "@/features/maps/store/map-store";
 export interface VisualizationModeDef {
   id: string;
   label: string;
-  /** "volume3d" (extruded columns) and "animated" (pulsing canvas texture) are 3D-only concepts
-   *  with no sensible flat-map equivalent. */
+  /** "volume3d" (fill-extrusion columns) and "animated" (pulsing circle radius/opacity) are
+   *  rendered by MapLibre under globe projection — kept 3D-only because they read best with the
+   *  tilt/perspective the globe view provides, not because of any engine limitation. */
   modes: MapMode[];
 }
 

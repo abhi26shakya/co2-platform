@@ -1,6 +1,6 @@
 import { Navbar } from "@/components/layout/navbar";
 import { ContactForm } from "@/components/layout/contact-form";
-import { OrbitField } from "@/components/marketing/orbit-field";
+import { ParticleGlobe } from "@/components/marketing/particle-globe-loader";
 import { Reveal } from "@/components/marketing/reveal";
 import { Spotlight } from "@/components/marketing/spotlight";
 import {
@@ -101,19 +101,10 @@ export default function Home() {
       <Navbar />
       {/* ---- Hero ---- */}
       <section className="relative flex min-h-screen flex-col items-center justify-center px-6 overflow-hidden">
-        <OrbitField />
+        <ParticleGlobe />
         <Spotlight />
         <div className="relative z-10 flex flex-col items-center text-center -translate-y-8 sm:-translate-y-12">
-          <Reveal>
-            <span className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-ground-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-sensor shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-              Now estimating emissions from live satellite scenes
-            </span>
-          </Reveal>
-          <h1
-            className="mt-8 max-w-3xl text-5xl font-medium leading-[1.05] tracking-tight sm:text-7xl"
-            style={display}
-          >
+          <h1 className="headline-serif-italic mt-8 max-w-3xl text-5xl leading-[1.05] tracking-tight sm:text-7xl">
             See industrial CO₂
             <br />
             <span className="plume-text">from orbit</span>

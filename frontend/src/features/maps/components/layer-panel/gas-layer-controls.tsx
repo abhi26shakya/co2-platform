@@ -1,13 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Layers2 } from "lucide-react";
-
-const GASES = [
-  { id: "co2", label: "Carbon Dioxide (CO₂)", color: "bg-red-500", range: "380 - 450 ppm", gradient: "from-red-600 to-red-400" },
-  { id: "ch4", label: "Methane (CH₄)", color: "bg-purple-500", range: "1800 - 2200 ppb", gradient: "from-purple-600 to-purple-400" },
-  { id: "no2", label: "Nitrogen Dioxide (NO₂)", color: "bg-orange-500", range: "0 - 150 ppb", gradient: "from-orange-600 to-orange-400" },
-  { id: "so2", label: "Sulfur Dioxide (SO₂)", color: "bg-pink-500", range: "0 - 80 ppb", gradient: "from-pink-600 to-pink-400" },
-  { id: "co", label: "Carbon Monoxide (CO)", color: "bg-teal-500", range: "50 - 200 ppb", gradient: "from-teal-600 to-teal-400" },
-];
+import { GASES } from "@/features/maps/lib/gas-catalog";
 
 interface GasConfig {
   enabled: boolean;
@@ -26,6 +19,10 @@ export function GasLayerControls({ gases, onToggle, onOpacityChange }: Props) {
       <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
         <Layers2 className="h-3.5 w-3.5" /> Multi-Gas Layers
       </h3>
+      <p className="text-[10px] leading-snug text-ground-500">
+        Only CO₂ is measured from satellite data today. CH₄/NO₂/SO₂/CO layers are simulated
+        for visualization — derived from the same CO₂ signal, not independent measurements.
+      </p>
       <div className="space-y-3 text-xs">
         {GASES.map((gas) => {
           const config = gases[gas.id] || { enabled: false, opacity: 0.8 };

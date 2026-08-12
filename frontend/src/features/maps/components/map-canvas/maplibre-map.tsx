@@ -8,7 +8,7 @@ import { useMapStore, type SelectedFacility } from "@/features/maps/store/map-st
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
 import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
-import { getGasColorHex, getGasPlumes, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
+import { getGasColorHex, getGasPlumes, hexToRgb, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
 import {
   buildCircleResult,
   buildPickerResult,
@@ -40,16 +40,51 @@ interface Props {
   clearTrigger?: number;
   comparisonType?: string;
   cameraTarget?: { lat: number; lon: number } | null;
+  legendOn?: boolean;
+  onToggleLegend?: () => void;
+}
+
+// Globe-projection atmosphere styling ("Voyager2" polish pass) — a violet
+// limb glow that fades out as you zoom past the planetary view, since the
+// atmosphere ring only reads correctly when the whole globe is in frame.
+const GLOBE_SKY: maplibregl.SkySpecification = {
+  "sky-color": "#05040f",
+  "horizon-color": "#7c5cff",
+  "sky-horizon-blend": 0.6,
+  "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.9, 5, 0.35, 10, 0],
+};
+
+function applyGlobeSky(map: maplibregl.Map, is3d: boolean) {
+  // setSky() takes no optional/undefined form - pass {} to reset to the style
+  // spec's defaults when leaving globe mode, since sky/atmosphere styling is
+  // only meaningful for the tilted globe projection.
+  map.setSky(is3d ? GLOBE_SKY : {});
 }
 
 const PLANTS_SOURCE = "plants-source";
 const PLUME_SOURCE = "plume-source";
+const VOLUME_SOURCE = "gas-volume-source";
 const DRAFT_SOURCE = "gis-draft-source";
 const COMPLETED_SOURCE = "gis-completed-source";
 const BOUNDARIES_SOURCE = "boundaries-overlay-source";
 const ROADS_SOURCE = "roads-overlay-source";
 
-/** Builds a raster style for the given basemap id — mirrors the tile choices in the Cesium engine. */
+/** Builds a small square footprint (~1.1km side) around a point so fill-extrusion has a polygon
+ *  to extrude — MapLibre's "3D Extruded Columns" mode equivalent to Cesium's cylinder entities. */
+function buildColumnFootprint(lat: number, lon: number): number[][] {
+  const halfDeg = 0.005;
+  const latRad = (lat * Math.PI) / 180;
+  const lonHalf = halfDeg / Math.max(0.15, Math.cos(latRad));
+  return [
+    [lon - lonHalf, lat - halfDeg],
+    [lon + lonHalf, lat - halfDeg],
+    [lon + lonHalf, lat + halfDeg],
+    [lon - lonHalf, lat + halfDeg],
+    [lon - lonHalf, lat - halfDeg],
+  ];
+}
+
+/** Builds a raster style for the given basemap id. */
 function buildBasemapStyle(basemapId: string): maplibregl.StyleSpecification {
   const tiles = BASEMAP_TILES[basemapId] ?? BASEMAP_TILES.dark;
   const sources: Record<string, maplibregl.RasterSourceSpecification> = {};
@@ -61,16 +96,60 @@ function buildBasemapStyle(basemapId: string): maplibregl.StyleSpecification {
     layers.push({ id: `basemap-layer-${i}`, type: "raster", source: sourceId });
   });
 
-  return { version: 8, sources, layers };
+  return {
+    version: 8,
+    sources,
+    layers,
+    // Required for any text-field symbol layer (prediction labels, cluster counts) to render
+    // glyphs at all — without this the style loads fine but text silently never draws. MapLibre's
+    // own public demo-tiles font server, free and open, same one used in its official examples.
+    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  };
 }
 
 function addDataLayers(map: maplibregl.Map) {
   if (!map.getSource(PLANTS_SOURCE)) {
-    map.addSource(PLANTS_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    // MapLibre's built-in clustering is client-side and handles many thousands of points
+    // comfortably — plenty for this registry's current and near-term scale. Revisit only once
+    // the facility count grows large enough to justify server-side aggregation (see the MVT
+    // pipeline notes in docs/architecture.md).
+    map.addSource(PLANTS_SOURCE, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+      cluster: true,
+      clusterMaxZoom: 12,
+      clusterRadius: 50,
+    });
+    map.addLayer({
+      id: "plants-cluster-circle",
+      type: "circle",
+      source: PLANTS_SOURCE,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-color": ["step", ["get", "point_count"], "#34d399", 10, "#60a5fa", 50, "#e64980"],
+        "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 50, 24],
+        "circle-stroke-color": "#000000",
+        "circle-stroke-width": 1.5,
+        "circle-opacity": 0.85,
+      },
+    });
+    map.addLayer({
+      id: "plants-cluster-count",
+      type: "symbol",
+      source: PLANTS_SOURCE,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count_abbreviated"],
+        "text-size": 11,
+        "text-font": ["Noto Sans Bold"],
+      },
+      paint: { "text-color": "#09090b" },
+    });
     map.addLayer({
       id: "plants-circle",
       type: "circle",
       source: PLANTS_SOURCE,
+      filter: ["!", ["has", "point_count"]],
       paint: {
         "circle-radius": 6,
         "circle-color": "#10b981",
@@ -82,6 +161,7 @@ function addDataLayers(map: maplibregl.Map) {
       id: "plants-prediction-label",
       type: "symbol",
       source: PLANTS_SOURCE,
+      filter: ["!", ["has", "point_count"]],
       layout: {
         visibility: "none",
         "text-field": ["concat", ["get", "name"], "\n", ["get", "co2"], " ppm"],
@@ -126,9 +206,40 @@ function addDataLayers(map: maplibregl.Map) {
         // unlike heatmap-weight/-radius, it only accepts a constant or a zoom expression. Fold each
         // gas layer's configured opacity into the weight instead, so per-gas opacity still shows.
         "heatmap-weight": ["*", ["get", "intensity"], ["get", "opacity"]],
-        "heatmap-intensity": 1,
-        "heatmap-radius": 28,
+        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
+        // Footprint size comes from each hotspot's real modeled dispersion radius (radius_m, from
+        // the backend's plume analysis — see MapHotspot.radius_m), not a fixed constant, so a
+        // wider-reaching plume actually reads as covering more of the map than a tight one.
+        "heatmap-radius": ["interpolate", ["linear"], ["get", "radius_m"], 0, 20, 1000, 45, 5000, 90, 20000, 140],
         "heatmap-opacity": 0.85,
+        // Density → color ramp using this app's reserved plume-intensity tokens (amber → magenta,
+        // see globals.css) instead of MapLibre's default blue-red ramp, capped with a deep red for
+        // the highest-density "hot spots" — same visual language IntensityLegend already uses.
+        "heatmap-color": [
+          "interpolate",
+          ["linear"],
+          ["heatmap-density"],
+          0, "rgba(245, 166, 35, 0)",
+          0.2, "rgba(245, 166, 35, 0.55)",
+          0.5, "#f5a623",
+          0.75, "#e64980",
+          1, "#7f1d1d",
+        ],
+      },
+    });
+    // Soft bloom underneath the crisp marker/pulse dots - a larger, heavily
+    // blurred duplicate of the same point, so gas sources read as glowing
+    // rather than flat-filled circles (Voyager2 polish pass).
+    map.addLayer({
+      id: "gas-markers-glow",
+      type: "circle",
+      source: PLUME_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        "circle-radius": ["*", ["coalesce", ["get", "pulseRadius"], 10], 2.4],
+        "circle-color": ["get", "color"],
+        "circle-opacity": ["*", ["coalesce", ["get", "pulseOpacity"], ["get", "opacity"]], 0.35],
+        "circle-blur": 1,
       },
     });
     map.addLayer({
@@ -168,6 +279,43 @@ function addDataLayers(map: maplibregl.Map) {
         "circle-stroke-color": ["get", "color"],
         "circle-stroke-width": 2.5,
         "circle-stroke-opacity": ["*", ["get", "opacity"], 0.95],
+      },
+    });
+    // "Animated Pulse" mode — a variant of gas-markers whose radius/opacity are recomputed on an
+    // interval (see the pulse effect below) instead of the static per-render values the other
+    // modes use. Mirrors Cesium's CallbackProperty-driven pulsing ellipse.
+    map.addLayer({
+      id: "gas-animated-pulse",
+      type: "circle",
+      source: PLUME_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        "circle-radius": ["coalesce", ["get", "pulseRadius"], 10],
+        "circle-color": ["get", "color"],
+        "circle-opacity": ["coalesce", ["get", "pulseOpacity"], ["get", "opacity"]],
+        "circle-blur": 0.55,
+      },
+    });
+  }
+
+  // "3D Extruded Columns" mode — fill-extrusion needs polygon geometry, so this is a dedicated
+  // source (small square footprints from buildColumnFootprint) rather than reusing PLUME_SOURCE's
+  // points. Renders under both mercator and globe projection.
+  if (!map.getSource(VOLUME_SOURCE)) {
+    map.addSource(VOLUME_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "gas-volume-extrusion",
+      type: "fill-extrusion",
+      source: VOLUME_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        // "color" is an rgba() string with per-feature opacity already baked in — see the
+        // volumeFeatures push in the render effect below for why fill-extrusion-opacity itself
+        // can't carry that per-feature (data expressions aren't supported on this property).
+        "fill-extrusion-color": ["get", "color"],
+        "fill-extrusion-height": ["get", "height"],
+        "fill-extrusion-base": 0,
+        "fill-extrusion-opacity": 0.9,
       },
     });
   }
@@ -232,36 +380,48 @@ export default function MapLibreMap({
   clearTrigger = 0,
   comparisonType = "split-screen",
   cameraTarget = null,
+  legendOn = false,
+  onToggleLegend,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const completedShapesRef = useRef<GeoFeature[]>([]);
+  const plumeFeaturesRef = useRef<GeoJSON.Feature[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
-  const { camera, setCamera, selectedFacility, setSelectedFacility, gases } = useMapStore();
+  const { camera, setCamera, selectedFacility, setSelectedFacility, gases, mapMode } = useMapStore();
 
   // Init map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const storeCam = useMapStore.getState().camera;
+    const initialMapMode = useMapStore.getState().mapMode;
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: buildBasemapStyle("dark"),
       center: [storeCam.lon, storeCam.lat],
       zoom: storeCam.zoom,
-      pitch: 0,
+      pitch: storeCam.pitch,
       bearing: storeCam.bearing,
+      // 60 is MapLibre's mercator-projection default; globe projection (the "3D" mode) wants a
+      // deeper tilt to read as a planetary view rather than a slightly-angled flat map.
+      maxPitch: 85,
       attributionControl: false,
       // Needed so canvas.toBlob()/toDataURL() (PNG export) doesn't read a blanked buffer —
-      // WebGL clears the drawing buffer after each frame by default.
-      canvasContextAttributes: { preserveDrawingBuffer: true },
+      // WebGL clears the drawing buffer after each frame by default. alpha:true lets the
+      // deep-space area beyond the globe's silhouette show the starfield div behind the canvas.
+      canvasContextAttributes: { preserveDrawingBuffer: true, alpha: true },
     });
-
     map.on("load", () => {
+      // setProjection throws "Style is not done loading" if called before the style/sprite/glyphs
+      // have finished loading — safe only once "load" has fired, not immediately after construction.
+      map.setProjection({ type: initialMapMode === "3d" ? "globe" : "mercator" });
+      applyGlobeSky(map, initialMapMode === "3d");
       addDataLayers(map);
       setMapReady(true);
     });
@@ -270,15 +430,12 @@ export default function MapLibreMap({
     map.on("mouseout", () => setMouseCoords(null));
 
     map.on("moveend", () => {
-      // Deliberately omits pitch: MapLibre's 0-60 "tilt toward horizon" pitch and Cesium's
-      // -90..90 "look direction" pitch are different conventions over the same store field —
-      // writing this engine's value would corrupt the other engine's camera orientation on the
-      // next mode switch. Cesium owns `camera.pitch`; this engine tracks its own tilt locally.
       setCamera({
         lat: map.getCenter().lat,
         lon: map.getCenter().lng,
         zoom: map.getZoom(),
         bearing: map.getBearing(),
+        pitch: map.getPitch(),
       });
     });
 
@@ -293,6 +450,21 @@ export default function MapLibreMap({
     map.on("click", "gas-markers", handlePick);
     map.on("click", "gas-contour-inner", handlePick);
     map.on("click", "gas-contour-outer", handlePick);
+    map.on("click", "gas-animated-pulse", handlePick);
+    map.on("click", "gas-volume-extrusion", handlePick);
+
+    const handleClusterClick = async (e: maplibregl.MapLayerMouseEvent) => {
+      const feature = e.features?.[0];
+      const clusterId = feature?.properties?.cluster_id;
+      if (clusterId == null) return;
+      const source = map.getSource(PLANTS_SOURCE) as maplibregl.GeoJSONSource;
+      const zoom = await source.getClusterExpansionZoom(clusterId);
+      const geometry = feature!.geometry as GeoJSON.Point;
+      map.easeTo({ center: geometry.coordinates as [number, number], zoom, duration: 500 });
+    };
+    map.on("click", "plants-cluster-circle", handleClusterClick);
+    map.on("mouseenter", "plants-cluster-circle", () => (map.getCanvas().style.cursor = "pointer"));
+    map.on("mouseleave", "plants-cluster-circle", () => (map.getCanvas().style.cursor = ""));
 
     mapRef.current = map;
 
@@ -312,6 +484,30 @@ export default function MapLibreMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 2D/3D toggle — switches MapLibre's projection (mercator <-> globe) instead of swapping to a
+  // second rendering engine. Nudges pitch toward a planetary-view tilt entering 3D, and back to
+  // top-down leaving it, but only when the user hasn't already set a custom tilt of their own.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.setProjection({ type: mapMode === "3d" ? "globe" : "mercator" });
+    applyGlobeSky(map, mapMode === "3d");
+    if (mapMode === "3d") {
+      const easeTarget: { pitch?: number; zoom?: number } = {};
+      if (map.getPitch() < 20) easeTarget.pitch = 50;
+      // Both the store's default zoom (5) and the reset-camera zoom (3) sit too
+      // close-in for the globe's curvature/atmosphere glow to read at all - pull
+      // back to a planetary view on the 2D->3D transition so the "Voyager2" globe
+      // is actually visible, without fighting the user's zoom afterward. Verified
+      // empirically (screenshot pixel sampling) that zoom needs to drop below ~1
+      // before the starfield/atmosphere margin around the globe becomes visible.
+      if (map.getZoom() > 1) easeTarget.zoom = 0.5;
+      if (Object.keys(easeTarget).length > 0) map.easeTo({ ...easeTarget, duration: 900 });
+    } else if (mapMode === "2d" && map.getPitch() > 0) {
+      map.easeTo({ pitch: 0, duration: 800 });
+    }
+  }, [mapMode, mapReady]);
+
   // Basemap swap
   useEffect(() => {
     const map = mapRef.current;
@@ -319,7 +515,10 @@ export default function MapLibreMap({
 
     const applyStyle = () => {
       map.setStyle(buildBasemapStyle(activeBasemap));
-      map.once("styledata", () => addDataLayers(map));
+      map.once("styledata", () => {
+        addDataLayers(map);
+        applyGlobeSky(map, useMapStore.getState().mapMode === "3d");
+      });
     };
     applyStyle();
   }, [activeBasemap, mapReady]);
@@ -349,7 +548,8 @@ export default function MapLibreMap({
     if (!map || !mapReady) return;
     const plantsSource = map.getSource(PLANTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
     const plumeSource = map.getSource(PLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!plantsSource || !plumeSource) return;
+    const volumeSource = map.getSource(VOLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!plantsSource || !plumeSource || !volumeSource) return;
 
     const showPlantLayer = showPlants && showLayers.plants;
     plantsSource.setData({
@@ -375,6 +575,7 @@ export default function MapLibreMap({
 
     const showPlumeLayer = showHotspots && showLayers.heatmap;
     const plumeFeatures: GeoJSON.Feature[] = [];
+    const volumeFeatures: GeoJSON.Feature[] = [];
     if (showPlumeLayer) {
       const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
       activeGasKeys.forEach((gasKey) => {
@@ -384,36 +585,60 @@ export default function MapLibreMap({
           const valueNorm = Math.min(1, plume.intensity);
           const baseColorHex = getGasColorHex(gasKey, valueNorm);
           const colorHex = resolveComparisonColorHex(baseColorHex, plume, comparisonMode, comparisonType);
+          const metadata = {
+            name: `Detected ${gasKey.toUpperCase()} Plume`,
+            industry: `Greenhouse Gas Source: ${gasKey.toUpperCase()}`,
+            country: "India",
+            lat: plume.lat,
+            lon: plume.lon,
+            co2: `${plume.value.toFixed(1)} ${plume.unit}`,
+            confidence: `${Math.round(plume.intensity * 100)}%`,
+            satellite: "Sentinel-5P",
+            dataset: "Prediction Scene",
+          };
           plumeFeatures.push({
             type: "Feature",
             geometry: { type: "Point", coordinates: [plume.lon, plume.lat] },
-            properties: {
-              name: `Detected ${gasKey.toUpperCase()} Plume`,
-              industry: `Greenhouse Gas Source: ${gasKey.toUpperCase()}`,
-              country: "India",
-              lat: plume.lat,
-              lon: plume.lon,
-              co2: `${plume.value.toFixed(1)} ${plume.unit}`,
-              confidence: `${Math.round(plume.intensity * 100)}%`,
-              satellite: "Sentinel-5P",
-              dataset: "Prediction Scene",
-              color: colorHex,
-              opacity: config.opacity,
-              intensity: valueNorm,
-            },
+            properties: { ...metadata, color: colorHex, opacity: config.opacity, intensity: valueNorm, radius_m: plume.radiusM },
+          });
+          // fill-extrusion-opacity has no data-driven (per-feature) variant in the MapLibre style
+          // spec (same limitation as heatmap-opacity above) — fold each gas layer's opacity into
+          // the extrusion color's alpha channel instead, via an rgba() string.
+          const rgb = hexToRgb(colorHex);
+          const volumeColorRgba = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})` : colorHex;
+          volumeFeatures.push({
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [buildColumnFootprint(plume.lat, plume.lon)] },
+            properties: { ...metadata, color: volumeColorRgba, height: 3000 + valueNorm * 45000 },
           });
         });
       });
     }
     plumeSource.setData({ type: "FeatureCollection", features: plumeFeatures });
+    volumeSource.setData({ type: "FeatureCollection", features: volumeFeatures });
+    plumeFeaturesRef.current = plumeFeatures;
 
     const activeGasPlumeLayer =
-      selectedMode === "markers" ? "gas-markers" : selectedMode === "contours" ? "contours" : "gas-heatmap";
+      selectedMode === "markers"
+        ? "gas-markers"
+        : selectedMode === "contours"
+          ? "contours"
+          : selectedMode === "volume3d"
+            ? "volume3d"
+            : selectedMode === "animated"
+              ? "animated"
+              : "gas-heatmap";
     const visibility = (id: string, show: boolean) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
     };
     visibility("gas-heatmap", showPlumeLayer && activeGasPlumeLayer === "gas-heatmap");
     visibility("gas-markers", showPlumeLayer && activeGasPlumeLayer === "gas-markers");
+    visibility("gas-volume-extrusion", showPlumeLayer && activeGasPlumeLayer === "volume3d");
+    visibility("gas-animated-pulse", showPlumeLayer && activeGasPlumeLayer === "animated");
+    visibility(
+      "gas-markers-glow",
+      showPlumeLayer && (activeGasPlumeLayer === "gas-markers" || activeGasPlumeLayer === "animated")
+    );
     // "contours" is both a full render mode and an always-on overlay toggle (showLayers.contours) —
     // show the ring layers whenever either wants them.
     const showContourRings = showPlumeLayer && (activeGasPlumeLayer === "contours" || showLayers.contours);
@@ -424,6 +649,37 @@ export default function MapLibreMap({
     visibility("boundaries-overlay", showLayers.boundaries);
     visibility("roads-overlay", showLayers.roads);
   }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, mapReady]);
+
+  // Animated Pulse mode — recomputes radius/opacity on an interval from the last-built plume
+  // features (plumeFeaturesRef, set by the effect above) rather than rebuilding gas plume data
+  // from scratch every tick.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || selectedMode !== "animated" || !(showHotspots && showLayers.heatmap)) return;
+
+    const interval = setInterval(() => {
+      const source = map.getSource(PLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      if (!source) return;
+      const t = Date.now() / 1000;
+      const animated = plumeFeaturesRef.current.map((f, i) => {
+        const props = (f.properties ?? {}) as Record<string, number>;
+        const intensity = props.intensity ?? 0;
+        const opacity = props.opacity ?? 0.7;
+        const factor = 1 + 0.25 * Math.sin(t * 2.5 + i * 0.5);
+        return {
+          ...f,
+          properties: {
+            ...props,
+            pulseRadius: (8 + intensity * 10) * factor,
+            pulseOpacity: Math.min(1, opacity * (0.6 + 0.4 * factor)),
+          },
+        };
+      });
+      source.setData({ type: "FeatureCollection", features: animated } as GeoJSON.FeatureCollection);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [selectedMode, showHotspots, showLayers, mapReady]);
 
   const syncCompletedShapes = () => {
     const map = mapRef.current;
@@ -565,16 +821,25 @@ export default function MapLibreMap({
     };
   }, [drawingMode, clearTrigger, onDrawingComplete, onLiveMeasurement, mapReady]);
 
-  const handleZoom = (zoomIn: boolean) => mapRef.current?.[zoomIn ? "zoomIn" : "zoomOut"]();
+  const handleZoom = (zoomIn: boolean) => {
+    const map = mapRef.current;
+    if (!map) return;
+    // Default zoomIn()/zoomOut() can anchor around screen space rather than the map's actual
+    // lng/lat center — under globe projection (tilted via the pitch this engine applies in 3D
+    // mode) that visibly drifts the globe off-center as you zoom. Pin the center explicitly so
+    // the zoom buttons always zoom straight in/out on whatever the globe is currently centered on.
+    const targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), map.getZoom() + (zoomIn ? 1 : -1)));
+    map.easeTo({ center: map.getCenter(), zoom: targetZoom, duration: 300 });
+  };
 
   const handleTilt = (tiltUp: boolean) => {
     const map = mapRef.current;
     if (!map) return;
-    map.setPitch(Math.max(0, Math.min(60, map.getPitch() + (tiltUp ? 5 : -5))));
+    map.setPitch(Math.max(0, Math.min(85, map.getPitch() + (tiltUp ? 5 : -5))));
   };
 
   const handleResetCamera = () => {
-    mapRef.current?.flyTo({ center: [80.0, 24.0], zoom: 3, pitch: 0, bearing: 0, duration: 2000 });
+    mapRef.current?.flyTo({ center: [80.0, 24.0], zoom: 3, pitch: mapMode === "3d" ? 50 : 0, bearing: 0, duration: 2000 });
   };
 
   const toggleFullscreen = () => {
@@ -598,11 +863,14 @@ export default function MapLibreMap({
       {!mapReady && (
         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3 z-15 bg-ground-950/80 backdrop-blur-sm text-sm text-ground-400">
           <span className="h-6 w-6 rounded-full border-2 border-dashed border-sensor animate-spin" />
-          <span>Loading 2D map…</span>
+          <span>{mapMode === "3d" ? "Synchronizing 3D Climate Globe…" : "Loading 2D map…"}</span>
         </div>
       )}
 
-      <div ref={containerRef} className="w-full h-full" />
+      {mapMode === "3d" && (
+        <div className="map-starfield absolute inset-0" aria-hidden />
+      )}
+      <div ref={containerRef} className="relative w-full h-full" />
 
       {mapReady && (
         <>
@@ -632,7 +900,21 @@ export default function MapLibreMap({
             onTiltDown={() => handleTilt(false)}
             onReset={handleResetCamera}
             onToggleFullscreen={toggleFullscreen}
+            legendOn={legendOn}
+            onToggleLegend={onToggleLegend}
+            onShowHelp={() => setHelpOpen((v) => !v)}
           />
+
+          {helpOpen && (
+            <div className="glass-strong absolute bottom-16 right-4 z-20 w-64 rounded-xl p-3.5 space-y-1.5 text-[11px] text-ground-300 animate-in fade-in slide-in-from-bottom-1 duration-150">
+              <p className="font-semibold text-instrument">How to use this map</p>
+              <p>Click a plant or gas layer point for details. Drag to pan, scroll to zoom, or use the +/− controls.</p>
+              <p>Switch 2D/3D and pick a gas or fuel type from the toolbar above. Use the menu icon for basemaps, GIS tools, and export.</p>
+              <button onClick={() => setHelpOpen(false)} className="text-sensor font-semibold cursor-pointer">
+                Got it
+              </button>
+            </div>
+          )}
         </>
       )}
 
