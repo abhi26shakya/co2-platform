@@ -187,6 +187,20 @@ export default function ParticleGlobe() {
         >
           <Scene spinning={!reduce} />
         </Canvas>
+        {/* A sparse point cloud has no continuous edge of its own - individual
+            dot gaps/size variation make the silhouette read as uneven rather
+            than a clean circle. This thin guide sits exactly at the sphere's
+            true projected radius (2 / (5.2 * tan(22.5deg)) ~= 92.85% of this
+            container, i.e. 26rem of 28rem - matches the Canvas's own camera
+            math above) so the eye has an unambiguous circular edge. */}
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{
+            border: "1px solid rgba(180, 160, 255, 0.18)",
+            boxShadow: "0 0 28px 1px rgba(124, 92, 255, 0.1)",
+          }}
+          aria-hidden
+        />
       </div>
     </div>
   );
