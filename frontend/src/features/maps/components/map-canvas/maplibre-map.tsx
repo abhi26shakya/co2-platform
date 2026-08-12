@@ -494,14 +494,17 @@ export default function MapLibreMap({
     applyGlobeSky(map, mapMode === "3d");
     if (mapMode === "3d") {
       const easeTarget: { pitch?: number; zoom?: number } = {};
-      if (map.getPitch() < 20) easeTarget.pitch = 50;
+      if (map.getPitch() < 20) easeTarget.pitch = 40;
       // Both the store's default zoom (5) and the reset-camera zoom (3) sit too
-      // close-in for the globe's curvature/atmosphere glow to read at all - pull
-      // back to a planetary view on the 2D->3D transition so the "Voyager2" globe
-      // is actually visible, without fighting the user's zoom afterward. Verified
-      // empirically (screenshot pixel sampling) that zoom needs to drop below ~1
-      // before the starfield/atmosphere margin around the globe becomes visible.
-      if (map.getZoom() > 1) easeTarget.zoom = 0.5;
+      // close-in for the globe's curvature to read at all - pull back to a
+      // planetary view on the 2D->3D transition so the globe is actually
+      // visible as a sphere, not just a tilted flat map. Confirmed via direct
+      // Map instance testing that MapLibre's globe projection permits negative
+      // zoom (down to ~-2, its style minZoom) with no "cover the container"
+      // floor the way mercator has (mercator clamps to ~0.39 regardless of
+      // viewport size or minZoom) - -1 gives a clearly curved, starfield-ringed
+      // globe without shrinking it to an illegible speck.
+      if (map.getZoom() > -1) easeTarget.zoom = -1;
       if (Object.keys(easeTarget).length > 0) map.easeTo({ ...easeTarget, duration: 900 });
     } else if (mapMode === "2d" && map.getPitch() > 0) {
       map.easeTo({ pitch: 0, duration: 800 });

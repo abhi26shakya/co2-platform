@@ -225,23 +225,35 @@ italic serif headlines, and a minimal top nav. Rolled out in phases:
   (`GLOBE_SKY`, applied via `map.setSky()` whenever globe/3D projection is
   active) and a CSS starfield (`.map-starfield`, visible through the
   canvas's `alpha:true` context beyond the globe's silhouette) plus a
-  blurred glow-halo layer under gas markers/pulse dots. Also fixed a real
-  gap found during QA: the default camera zoom (5) and reset-camera zoom
-  (3) were both too close-in for the globe's curvature/atmosphere to ever
-  be visible, so entering 3D now also eases the camera out to zoom ~0.5.
+  blurred glow-halo layer under gas markers/pulse dots. The 2D->3D
+  transition also eases the camera to zoom -1 (see follow-up below for why).
 - **Token rollout**: audited all remaining pages for non-token colors; only
   `analytics/page.tsx` (hardcoded hex chart colors, a redundant
   `resolvedTheme`-driven light/dark ternary now unnecessary since the CSS
   vars already resolve per-theme) and `docs/page.tsx` (Tailwind default
   `emerald`/`blue` badge colors instead of `sensor`/`halo`) needed changes.
 
-Known limitation: MapLibre GL's globe projection did not visibly render
-true spherical curvature during QA (the star/space boundary appeared as a
-straight line rather than an arc at low zoom) - the sky/atmosphere/
-starfield styling is confirmed active (`map.getSky()`), but whether the
-underlying globe camera is rendering a true sphere in this MapLibre
-version needs closer investigation if a more dramatic 3D globe look is
-wanted later.
+**Follow-up (globe curvature investigation):** QA initially found the globe
+never visibly showed spherical curvature - the star/space boundary read as
+a straight line, not an arc, even after easing the 2D->3D transition to
+zoom 0.5. Debugging the live `maplibregl.Map` instance found the real
+cause: **mercator projection enforces a hard "cover the container" zoom
+floor (~0.39, reproduced identically regardless of viewport size or
+latitude), while globe projection has no such floor** and accepts negative
+zoom down to its style `minZoom` (-2). 0.5 was still far too close-in to
+ever reveal curvature - it was only a hair past the *mercator* floor.
+Verified at zoom -2 and -1 (via direct `Map` API calls, then confirmed
+through the actual 2D/3D toolbar toggle) that the globe renders exactly as
+intended: a small, crisply curved planet with a full starfield margin. The
+3D-entry ease target is now zoom -1 (paired with pitch 40), which reads as
+a clear sphere without shrinking the globe to an illegible speck.
+
+Separately noticed but **not changed** during this investigation:
+`getSavedMapMode()` in `map-store.ts` still defaults new users to 2D, with
+a comment justifying it by "3D (Cesium) reliably crashes" - that reasoning
+predates the Cesium retirement (KI-004) and is now stale, but flipping the
+default affects every new user's first impression of the map, so it's left
+as a flagged decision rather than changed unilaterally.
 
 ## Post-v1 backlog
 
