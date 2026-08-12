@@ -169,7 +169,11 @@ export default function ParticleGlobe() {
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden pt-24"
+      // Same -translate-y offset as the hero text block (see (public)/page.tsx)
+      // so the globe centers on the exact same point as the headline/copy
+      // instead of drifting apart (padding-top and a transform shift a
+      // flex-centered element by different amounts for the same value).
+      className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden -translate-y-8 sm:-translate-y-12"
       aria-hidden
     >
       <div className="hero-atmosphere absolute h-[34rem] w-[34rem] rounded-full opacity-60" />

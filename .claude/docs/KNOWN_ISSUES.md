@@ -341,6 +341,20 @@ respectively. Verification: manual smoke test in both projections against a
 local `next dev` server; production Vercel verification (the original repro
 environment) is a follow-up before calling this fully closed.
 
+**Production verification (2026-08-13):** Tested directly against
+`co2-platform-nine.vercel.app/maps` (the original repro environment),
+toggling 2D->3D via the real toolbar control. No crash — tab remained
+responsive well past the ~2-3s window the original Cesium crash reliably
+hit within, and the globe rendered correctly (curved planet, starfield,
+sky/atmosphere glow, all from the zoom -1 fix in the follow-up commit
+below). Console showed only: a hydration warning and `/api/v1/*` 404s,
+both reproduced identically in local testing under the same test
+methodology (a manually-injected fake auth token with no matching
+backend/mock behind it) rather than anything deploy-specific, plus one
+unrelated pre-existing `favicon.ico` 404. **Fully closed** — the
+Vercel-specific crash this issue tracked does not reproduce with Cesium
+gone.
+
 ---
 
 # High Priority Issues
