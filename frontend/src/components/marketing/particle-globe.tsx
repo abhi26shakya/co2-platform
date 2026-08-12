@@ -69,9 +69,11 @@ function buildGlobeGeometry(radius: number) {
     const lonDeg = (Math.atan2(z, x) * 180) / Math.PI;
     const density = landDensity(latDeg, lonDeg);
 
-    // Sparse ocean dots for the sphere's silhouette; dense, brighter land dots.
+    // Ocean dots are dimmer/smaller than land, but every point is kept (not
+    // thinned to 1-in-3 as before) - a sparse, ragged silhouette rim was the
+    // main reason the globe read as not-quite-circular rather than a clean
+    // sphere outline.
     const isLand = density > 0.22;
-    if (!isLand && i % 3 !== 0) continue;
 
     positions.push(x * radius, y * radius, z * radius);
 

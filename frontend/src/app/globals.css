@@ -191,16 +191,18 @@ body {
   color: transparent;
 }
 
-/* Voyager chrome glow - hero backdrops, globe limb glow. */
+/* Voyager chrome glow - hero backdrops, globe limb glow. A tighter falloff
+   and lighter blur than a generic soft blob, so the glow reads as a defined
+   circle behind the globe rather than an amorphous haze. */
 .hero-atmosphere {
   background-image: radial-gradient(
     closest-side,
     rgba(124, 92, 255, 0.35),
-    rgba(230, 73, 128, 0.2) 45%,
-    rgba(79, 124, 255, 0.12) 70%,
-    transparent 85%
+    rgba(230, 73, 128, 0.22) 40%,
+    rgba(79, 124, 255, 0.14) 62%,
+    transparent 72%
   );
-  filter: blur(60px);
+  filter: blur(36px);
 }
 
 /* Large italic serif headline treatment (Voyager2-style hero text). */
