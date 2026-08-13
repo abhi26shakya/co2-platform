@@ -251,7 +251,7 @@ See "Resolved Issues" section below for the full writeup and resolution.
 
 ---
 
-## KI-006 — `frontend/Dockerfile` builds a dev-mode image, not production
+## KI-006 — `frontend/Dockerfile` builds a dev-mode image, not production (RESOLVED)
 
 **Classification**: Bug / Infrastructure
 **Discovered**: 2026-07-27, full functionality audit (`AUDIT_REPORT.md`).
@@ -269,6 +269,13 @@ misleading to anyone assuming the Dockerfile is deploy-ready.
 → `next start`), add a non-root `USER`, and a `.dockerignore` to avoid
 `COPY . .` pulling in the whole repo.
 **Priority**: Critical.
+**Status: Resolved** — verified 2026-08-13 (`/next` session) that
+`frontend/Dockerfile` is already a proper multi-stage build (`deps` →
+`builder` → `runner`, ending in `CMD ["npm", "run", "start"]`) with a
+non-root `nextjs` user, landed via the `chore/audit-fixes-critical-small`
+PR. This entry was left marked open after that fix shipped; backdating
+the status now. Backend and ml-service Dockerfiles still run as root
+(tracked as open under I2 in `AUDIT_REPORT.md` / `NEXT_ACTIONS.md`).
 
 ---
 
