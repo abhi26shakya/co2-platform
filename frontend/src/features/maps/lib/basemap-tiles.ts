@@ -1,25 +1,9 @@
 /**
- * Raster tile URL templates for the map's basemap selector, shared across both the flat
- * (mercator) and globe projections so basemap choice looks consistent in either mode.
- */
-export const BASEMAP_TILES: Record<string, string[]> = {
-  dark: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
-  // CARTO Positron — muted gray landmass, near-white ocean, minimal labels. Paired with the
-  // globe's dark starfield sky (map-starfield in globals.css) this reproduces the Climate
-  // TRACE-style "light planet floating in dark space" look.
-  light: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
-  satellite: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-  hybrid: [
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    "https://a.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
-  ],
-  osm: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
-};
-
-/**
  * Standalone overlay layers toggled independently of the basemap (LayerToggleOverlay's
- * "boundaries"/"roads" checkboxes). Reuses the same CARTO/OSM providers as the basemaps above —
- * no new tile provider — composited on top at reduced alpha.
+ * "boundaries"/"roads" checkboxes). These are unaffected by the Mapbox basemap migration — the
+ * basemap style itself now comes from `basemap-catalog.ts`'s `styleUrl` field (Mapbox-hosted
+ * vector styles), but these overlays are separate raster sources composited on top regardless of
+ * which basemap style is active, so they stay on their existing free providers.
  */
 export const OVERLAY_TILES = {
   /** CARTO's labels-only tile includes admin borders + place labels, no fill — a real overlay,

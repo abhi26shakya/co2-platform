@@ -15,8 +15,8 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Dynamic MapLibre import for client-only rendering (touches window/DOM APIs directly).
-const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
+// Dynamic Mapbox GL JS import for client-only rendering (touches window/DOM APIs directly).
+const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/mapbox-map"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[24rem] items-center justify-center rounded-xl border border-ground-700 bg-ground-900/40 text-sm text-ground-400">

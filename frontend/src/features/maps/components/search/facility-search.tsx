@@ -12,9 +12,13 @@ interface Props {
   onSelect: (result: MapSearchResult) => void;
   /** Full plant roster shown as a browsable dropdown/list when the query is empty. */
   allFacilities?: MapSearchResult[];
+  /** True while a live Mapbox geocoding request is in flight for the current query (see
+   *  geocoding.ts) — local plant/hotspot/region matches already resolve synchronously and aren't
+   *  covered by this flag. */
+  loading?: boolean;
 }
 
-export function FacilitySearch({ query, onQueryChange, results, onSelect, allFacilities = [] }: Props) {
+export function FacilitySearch({ query, onQueryChange, results, onSelect, allFacilities = [], loading = false }: Props) {
   const [focused, setFocused] = useState(false);
   const isBrowsing = query.trim().length === 0;
   const visible = isBrowsing ? allFacilities : results;
@@ -37,6 +41,12 @@ export function FacilitySearch({ query, onQueryChange, results, onSelect, allFac
           />
         </div>
       </Card>
+
+      {focused && !isBrowsing && loading && visible.length === 0 && (
+        <div className="glass-strong absolute top-full left-0 right-0 mt-1 rounded-lg z-20 px-3 py-2 text-[10px] text-ground-400 animate-in fade-in slide-in-from-top-1 duration-150">
+          Searching…
+        </div>
+      )}
 
       {focused && visible.length > 0 && (
         <div className="glass-strong absolute top-full left-0 right-0 mt-1 rounded-lg z-20 max-h-72 overflow-y-auto divide-y divide-ground-800 animate-in fade-in slide-in-from-top-1 duration-150">

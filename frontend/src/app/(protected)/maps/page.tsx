@@ -17,6 +17,7 @@ import {
   timeScaleFactor,
 } from "@/features/maps/lib/enrich-plants";
 import { buildFacilityList, buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
+import { geocodeSearch } from "@/features/maps/lib/geocoding";
 import { fetchStateBoundaries, searchStateBoundaries, type RegionBoundary } from "@/features/maps/lib/regions";
 import { pointInPolygon } from "@/features/maps/components/gis-tools/lib/geo-math";
 import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/lib/visualization-mode-catalog";
@@ -41,9 +42,9 @@ import { AlertsBadge, type MapAlert } from "@/features/maps/components/alerts/al
 import { ExportMenu } from "@/features/maps/components/export-share/export-menu";
 import { ShareDialog } from "@/features/maps/components/export-share/share-dialog";
 
-// MapLibre touches window/DOM APIs directly and drives both the flat (mercator) and globe
+// Mapbox GL JS touches window/DOM APIs directly and drives both the flat (mercator) and globe
 // projections — see KI-004 in KNOWN_ISSUES.md for why the separate Cesium 3D engine was retired.
-const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/maplibre-map"), {
+const MapCanvas = dynamic(() => import("@/features/maps/components/map-canvas/mapbox-map"), {
   ssr: false,
   loading: () => (
     <div className="glass flex h-[40rem] items-center justify-center rounded-xl text-sm text-ground-400">
@@ -188,7 +189,38 @@ export default function MapPage() {
           raw: s,
         }))
       : [];
-  const searchResults = [...stateResults, ...buildSearchResults(filteredPlants, hotspots, searchQuery)];
+  // Live Mapbox geocoding results for the current query — additive to the local plant/hotspot/
+  // region matches above, debounced so every keystroke doesn't fire a billed request. Local
+  // matches are shown first (searchResults ordering below); this only covers places absent from
+  // the already-loaded local dataset (e.g. a city with no registered facility).
+  const [geocodeResults, setGeocodeResults] = useState<MapSearchResult[]>([]);
+  const [geocodeLoading, setGeocodeLoading] = useState(false);
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    // No setState here for the empty-query case — geocodeResults/geocodeLoading naturally fall
+    // back to [] / false below via the trimmedQuery-derived values, so an effect resetting them
+    // synchronously isn't needed (avoids react-hooks/set-state-in-effect).
+    if (trimmed.length === 0) return;
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      setGeocodeLoading(true);
+      geocodeSearch(trimmed, { lat: camera.lat, lon: camera.lon }).then((results) => {
+        if (cancelled) return;
+        setGeocodeResults(results);
+        setGeocodeLoading(false);
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [searchQuery, camera.lat, camera.lon]);
+
+  const trimmedSearchQuery = searchQuery.trim();
+  const effectiveGeocodeResults = trimmedSearchQuery.length === 0 ? [] : geocodeResults;
+  const effectiveGeocodeLoading = trimmedSearchQuery.length === 0 ? false : geocodeLoading;
+  const localSearchResults = [...stateResults, ...buildSearchResults(filteredPlants, hotspots, searchQuery)];
+  const searchResults = [...localSearchResults, ...effectiveGeocodeResults];
   const allFacilities = buildFacilityList(filteredPlants);
 
   const handleSelectSearchResult = (result: MapSearchResult) => {
@@ -205,8 +237,20 @@ export default function MapPage() {
       }
       return;
     }
+    if (result.type === "place") {
+      // A raw Mapbox geocoding hit, not a facility — fly the camera there without opening the
+      // facility-inspector drawer (there's no plant/hotspot record behind it).
+      setSelectedRegion(null);
+      setSearchQuery(result.name);
+      setCameraTarget({ lat: result.lat, lon: result.lon });
+      return;
+    }
     setSelectedRegion(null);
-    setSelectedFacility(result.raw);
+    // "place" and "region" are excluded by the two branches above, so raw is always a plant/
+    // hotspot record here — the { bbox } shape used by "place" results is structurally unrelated
+    // to SelectedFacility, which is why this needs an explicit assertion rather than relying on
+    // result.type narrowing result.raw (MapSearchResult keeps them as separate wide properties).
+    setSelectedFacility(result.raw as Parameters<typeof setSelectedFacility>[0]);
     setSearchQuery(result.name);
     setCameraTarget({ lat: result.lat, lon: result.lon });
     openInspectorDrawer();
@@ -264,6 +308,7 @@ export default function MapPage() {
         searchResults={searchResults}
         allFacilities={allFacilities}
         onSelectSearchResult={handleSelectSearchResult}
+        searchLoading={effectiveGeocodeLoading}
         fuelTypeOptions={fuelTypeOptions}
         selectedFuelType={toolbarFuelType}
         onSelectFuelType={handleToolbarFuelType}

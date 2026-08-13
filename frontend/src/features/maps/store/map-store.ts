@@ -16,7 +16,7 @@ interface GasConfig {
 export type MapMode = "2d" | "3d";
 
 /** Whatever was last clicked/selected on the map — a plant (PlantOut-shaped) or a synthetic gas
- *  plume/hotspot entity (see the `metadata` shape built in maplibre-map.tsx), which don't share a
+ *  plume/hotspot entity (see the `metadata` shape built in mapbox-map.tsx), which don't share a
  *  single schema. All fields optional and no index signature, so concrete shapes like
  *  EnrichedPlant/PlantOut remain structurally assignable here. */
 export interface SelectedFacility {
@@ -53,8 +53,8 @@ interface MapStore {
   setGasOpacity: (gas: string, opacity: number) => void;
 }
 
-// pitch uses MapLibre's convention (0 = straight down, up to maxPitch) now that a single engine
-// (globe projection for 3D, mercator for 2D) owns the camera — see maplibre-map.tsx.
+// pitch uses Mapbox GL JS's convention (0 = straight down, up to maxPitch) now that a single engine
+// (globe projection for 3D, mercator for 2D) owns the camera — see mapbox-map.tsx.
 const DEFAULT_CAMERA = {
   lat: 24.0,
   lon: 80.0,
@@ -81,9 +81,10 @@ const getSavedMapMode = (): MapMode => {
     if (saved === "2d" || saved === "3d") return saved;
   }
   // 3D used to default off as a stopgap around a Cesium-specific Vercel crash (see KI-004 in
-  // .claude/docs/KNOWN_ISSUES.md) — Cesium has since been retired in favor of MapLibre's native
-  // globe projection, and production re-verification (2026-08-13) found no crash. New users now
-  // land on the 3D globe, matching the Climate TRACE-style default view.
+  // .claude/docs/KNOWN_ISSUES.md) — Cesium has since been retired in favor of a single WebGL
+  // engine's native globe projection (MapLibre originally, now Mapbox GL JS), and production
+  // re-verification (2026-08-13) found no crash. New users now land on the 3D globe, matching the
+  // Climate TRACE-style default view.
   return "3d";
 };
 

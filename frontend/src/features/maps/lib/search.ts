@@ -3,14 +3,16 @@ import type { MapHotspot } from "@/types/geo";
 import { searchCountryBoundaries, type RegionBoundary } from "@/features/maps/lib/regions";
 
 export interface MapSearchResult {
-  type: "plant" | "hotspot" | "region";
+  /** "place" is a live Mapbox Geocoding API result (see geocoding.ts) — additive to the other
+   *  three, which are pure client-side matches over already-loaded local data. */
+  type: "plant" | "hotspot" | "region" | "place";
   id: string;
   name: string;
   country: string;
   details: string;
   lat: number;
   lon: number;
-  raw: EnrichedPlant | (MapHotspot & { name: string }) | RegionBoundary;
+  raw: EnrichedPlant | (MapHotspot & { name: string }) | RegionBoundary | { bbox?: [number, number, number, number] };
 }
 
 const MAX_RESULTS = 5;

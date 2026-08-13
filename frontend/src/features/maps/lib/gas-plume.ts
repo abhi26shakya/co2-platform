@@ -1,6 +1,6 @@
 import type { MapHotspot } from "@/types/geo";
 
-/** Gas-plume color/offset logic shared by every render mode in maplibre-map.tsx (heatmap,
+/** Gas-plume color/offset logic shared by every render mode in mapbox-map.tsx (heatmap,
  *  markers, contours, volume, animated), across both the flat and globe projections. */
 export interface PlumePoint {
   lat: number;
@@ -10,7 +10,7 @@ export interface PlumePoint {
   unit: string;
   /** The real dispersion radius (meters) the backend estimated for this hotspot
    *  (MapHotspot.radius_m) — how far its effect actually reaches on the ground, not a display
-   *  constant. Drives the density layer's footprint size in maplibre-map.tsx. */
+   *  constant. Drives the density layer's footprint size in mapbox-map.tsx. */
   radiusM: number;
   /** Nearest-plant-derived sector (see enrich-plants.ts attachNearestSector), forwarded through
    *  for sector-based color mode - undefined when the caller passes plain MapHotspot[] without

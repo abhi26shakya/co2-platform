@@ -4,7 +4,7 @@ import { basemapsForMode, isBasemapSupported, BASEMAPS, DEFAULT_2D_BASEMAP } fro
 describe("basemapsForMode", () => {
   it("includes every basemap in 2d mode", () => {
     const ids = basemapsForMode("2d").map((b) => b.id);
-    expect(ids).toEqual(["light", "dark", "satellite", "hybrid", "osm"]);
+    expect(ids).toEqual(["light", "dark", "satellite", "hybrid", "streets"]);
   });
 
   it("includes every basemap in 3d mode", () => {

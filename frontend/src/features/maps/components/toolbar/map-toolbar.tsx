@@ -62,6 +62,7 @@ interface Props {
   searchResults: MapSearchResult[];
   allFacilities: MapSearchResult[];
   onSelectSearchResult: (r: MapSearchResult) => void;
+  searchLoading?: boolean;
   fuelTypeOptions: string[];
   selectedFuelType: string;
   onSelectFuelType: (f: string) => void;
@@ -91,6 +92,7 @@ export function MapToolbar({
   searchResults,
   allFacilities,
   onSelectSearchResult,
+  searchLoading = false,
   fuelTypeOptions,
   selectedFuelType,
   onSelectFuelType,
@@ -144,6 +146,7 @@ export function MapToolbar({
           results={searchResults}
           onSelect={onSelectSearchResult}
           allFacilities={allFacilities}
+          loading={searchLoading}
         />
       </div>
 

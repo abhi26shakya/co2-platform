@@ -1,23 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import * as maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
-
-// MapLibre resolves its worker script from a URL computed relative to its own bundled module at
-// runtime (`new URL('./maplibre-gl-worker.mjs', import.meta.url)`), which several bundler/runtime
-// combinations (observed here under both webpack and Turbopack dev builds) fail to resolve to a
-// URL Next.js actually serves - the worker silently never starts, so every GeoJSON source
-// (plants, hotspots, markers, extrusion columns) hangs forever mid-load with correct data but
-// nothing rendered. Pointing at a real static copy (public/maplibre-gl-worker.mjs, copied from
-// node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs - keep in sync on maplibre-gl upgrades)
-// sidesteps that resolution entirely. Must run before any `maplibregl.Map` is constructed.
-maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { Compass } from "lucide-react";
 import { useMapStore, type SelectedFacility } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
-import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
+import { getBasemapStyleUrl } from "@/features/maps/lib/basemap-catalog";
+import { OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
 import { getGasColorHex, getGasPlumes, hexToRgb, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
 import { getSectorColorHex } from "@/features/maps/lib/sector-colors";
 import {
@@ -34,6 +25,11 @@ import {
 } from "@/features/maps/components/gis-tools/lib/geo-math";
 import type { DrawingMode } from "@/features/maps/hooks/use-drawing";
 import type { ShowLayers } from "@/features/maps/components/layer-panel/layer-toggle-overlay";
+
+// Mapbox styles/tiles/geocoding all require this — set once before any `mapboxgl.Map` is
+// constructed. Public token by Mapbox's own design (restricted via URL allow-listing in the
+// Mapbox account dashboard, not by secrecy) — see .env.example.
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 
 interface Props {
   plants: (PlantOut & { sector?: string })[];
@@ -65,18 +61,21 @@ interface Props {
 // Globe-projection atmosphere styling ("Voyager2" polish pass) — a violet
 // limb glow that fades out as you zoom past the planetary view, since the
 // atmosphere ring only reads correctly when the whole globe is in frame.
-const GLOBE_SKY: maplibregl.SkySpecification = {
-  "sky-color": "#05040f",
-  "horizon-color": "#7c5cff",
-  "sky-horizon-blend": 0.6,
-  "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.9, 5, 0.35, 10, 0],
+// Ported from Mapbox GL JS's SkySpecification (sky-color/horizon-color/sky-horizon-blend/
+// atmosphere-blend) to Mapbox GL JS's FogSpecification, which folds the "how much the horizon
+// haze blends in" behavior into a single zoom-expression-capable `horizon-blend` property instead
+// of two separate constant/expression properties.
+const GLOBE_FOG: mapboxgl.FogSpecification = {
+  color: "#7c5cff",
+  "high-color": "#05040f",
+  "space-color": "#05040f",
+  "horizon-blend": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 0.25, 10, 0],
 };
 
-function applyGlobeSky(map: maplibregl.Map, is3d: boolean) {
-  // setSky() takes no optional/undefined form - pass {} to reset to the style
-  // spec's defaults when leaving globe mode, since sky/atmosphere styling is
-  // only meaningful for the tilted globe projection.
-  map.setSky(is3d ? GLOBE_SKY : {});
+function applyGlobeFog(map: mapboxgl.Map, is3d: boolean) {
+  // setFog(null) resets to the style spec's defaults when leaving globe mode, since fog/atmosphere
+  // styling is only meaningful for the tilted globe projection.
+  map.setFog(is3d ? GLOBE_FOG : null);
 }
 
 const PLANTS_SOURCE = "plants-source";
@@ -91,7 +90,7 @@ const ROADS_SOURCE = "roads-overlay-source";
 const POPULATION_SOURCE = "population-overlay-source";
 
 /** Builds a small square footprint (~1.1km side) around a point so fill-extrusion has a polygon
- *  to extrude — MapLibre's "3D Extruded Columns" mode equivalent to Cesium's cylinder entities. */
+ *  to extrude — Mapbox GL JS's "3D Extruded Columns" mode equivalent to Cesium's cylinder entities. */
 function buildColumnFootprint(lat: number, lon: number): number[][] {
   const halfDeg = 0.003;
   const latRad = (lat * Math.PI) / 180;
@@ -107,7 +106,7 @@ function buildColumnFootprint(lat: number, lon: number): number[][] {
 
 /** Builds a many-sided polygon approximating a circle, for the "Pill Markers" mode's rounded
  *  cap - a second fill-extrusion stacked on top of the thin gas-volume-extrusion shaft (same
- *  base/height trick used to place it at the correct altitude, since a MapLibre circle *layer*
+ *  base/height trick used to place it at the correct altitude, since a Mapbox GL JS circle *layer*
  *  has no way to sit at an elevation matching an extrusion's height; only another extrusion
  *  polygon can). Wider than the shaft's own square footprint so it visibly overhangs as a cap. */
 function buildCircularCapFootprint(lat: number, lon: number): number[][] {
@@ -123,32 +122,9 @@ function buildCircularCapFootprint(lat: number, lon: number): number[][] {
   return coords;
 }
 
-/** Builds a raster style for the given basemap id. */
-function buildBasemapStyle(basemapId: string): maplibregl.StyleSpecification {
-  const tiles = BASEMAP_TILES[basemapId] ?? BASEMAP_TILES.dark;
-  const sources: Record<string, maplibregl.RasterSourceSpecification> = {};
-  const layers: maplibregl.LayerSpecification[] = [];
-
-  tiles.forEach((tileUrl, i) => {
-    const sourceId = `basemap-source-${i}`;
-    sources[sourceId] = { type: "raster", tiles: [tileUrl], tileSize: 256 };
-    layers.push({ id: `basemap-layer-${i}`, type: "raster", source: sourceId });
-  });
-
-  return {
-    version: 8,
-    sources,
-    layers,
-    // Required for any text-field symbol layer (prediction labels, cluster counts) to render
-    // glyphs at all — without this the style loads fine but text silently never draws. MapLibre's
-    // own public demo-tiles font server, free and open, same one used in its official examples.
-    glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  };
-}
-
-function addDataLayers(map: maplibregl.Map) {
+function addDataLayers(map: mapboxgl.Map) {
   if (!map.getSource(PLANTS_SOURCE)) {
-    // MapLibre's built-in clustering is client-side and handles many thousands of points
+    // Mapbox GL JS's built-in clustering is client-side and handles many thousands of points
     // comfortably — plenty for this registry's current and near-term scale. Revisit only once
     // the facility count grows large enough to justify server-side aggregation (see the MVT
     // pipeline notes in docs/architecture.md).
@@ -224,7 +200,7 @@ function addDataLayers(map: maplibregl.Map) {
   }
   if (!map.getSource(POPULATION_SOURCE)) {
     // WorldPop's ImageServer has no pre-generated tile cache (its plain /tile/{z}/{y}/{x} path
-    // 404s), only the WMS-style exportImage operation - {bbox-epsg-3857} is MapLibre's standard
+    // 404s), only the WMS-style exportImage operation - {bbox-epsg-3857} is Mapbox GL JS's standard
     // placeholder for exactly that pattern (same trick as any WMS raster source), verified
     // working directly (HTTP 200, image/png) before wiring this up. No API key/account needed,
     // unlike Mapbox's population-density offering (which isn't a ready-made tileset anyway - it'd
@@ -253,7 +229,7 @@ function addDataLayers(map: maplibregl.Map) {
       source: PLUME_SOURCE,
       layout: { visibility: "none" },
       paint: {
-        // heatmap-opacity has no data-driven (per-feature) variant in the MapLibre style spec —
+        // heatmap-opacity has no data-driven (per-feature) variant in the Mapbox GL JS style spec —
         // unlike heatmap-weight/-radius, it only accepts a constant or a zoom expression. Fold each
         // gas layer's configured opacity into the weight instead, so per-gas opacity still shows.
         "heatmap-weight": ["*", ["get", "intensity"], ["get", "opacity"]],
@@ -264,7 +240,7 @@ function addDataLayers(map: maplibregl.Map) {
         "heatmap-radius": ["interpolate", ["linear"], ["get", "radius_m"], 0, 20, 1000, 45, 5000, 90, 20000, 140],
         "heatmap-opacity": 0.85,
         // Density → color ramp using this app's reserved plume-intensity tokens (amber → magenta,
-        // see globals.css) instead of MapLibre's default blue-red ramp, capped with a deep red for
+        // see globals.css) instead of Mapbox GL JS's default blue-red ramp, capped with a deep red for
         // the highest-density "hot spots" — same visual language IntensityLegend already uses.
         "heatmap-color": [
           "interpolate",
@@ -308,7 +284,7 @@ function addDataLayers(map: maplibregl.Map) {
     });
     // "Pill Markers" mode — a rounded cap sitting on top of the existing thin fill-extrusion
     // shaft (gas-volume-extrusion, same VOLUME_SOURCE footprint below it), approximating Climate
-    // TRACE's rounded-capsule 3D markers. MapLibre's fill-extrusion only produces flat-topped
+    // TRACE's rounded-capsule 3D markers. Mapbox GL JS's fill-extrusion only produces flat-topped
     // prisms (no native capsule geometry) and a true 3D mesh would need a custom WebGL layer -
     // the kind of engine complexity KI-004 deliberately retired (Cesium/three.js removal). A
     // plain `circle` layer can't substitute for the cap either - it has no way to sit at an
@@ -459,7 +435,7 @@ function addDataLayers(map: maplibregl.Map) {
   }
 }
 
-export default function MapLibreMap({
+export default function MapboxMap({
   plants,
   hotspots,
   showPlants,
@@ -482,7 +458,7 @@ export default function MapLibreMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapWrapperRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
   const completedShapesRef = useRef<GeoFeature[]>([]);
   const plumeFeaturesRef = useRef<GeoJSON.Feature[]>([]);
   // Skips the "Basemap swap" effect's very first run (right after mount, when mapReady flips
@@ -503,41 +479,43 @@ export default function MapLibreMap({
 
     const storeCam = useMapStore.getState().camera;
     const initialMapMode = useMapStore.getState().mapMode;
-    const map = new maplibregl.Map({
+    const map = new mapboxgl.Map({
       container: containerRef.current,
       // Must match whatever the "Basemap swap" effect below will apply once `mapReady` flips true
       // - constructing with a different style than `activeBasemap` used to mean that effect fired
       // a real (non-diffable) setStyle() call microseconds after the initial style's "load" event,
-      // racing its own in-flight sprite/glyph request teardown. That threw an uncaught
-      // "Cannot read properties of undefined (reading 'signal')" deep inside MapLibre's style
-      // loader, which silently wedged every GeoJSON source's worker round-trip for the rest of the
-      // session - sources never finished tiling, so nothing (plants, hotspots, markers, extrusion
-      // columns) ever rendered, despite correct data reaching the source. Starting on the real
-      // basemap makes the follow-up setStyle() a same-style no-op via MapLibre's diffing instead.
-      style: buildBasemapStyle(activeBasemap),
+      // racing its own in-flight sprite/glyph request teardown, which under Mapbox GL JS threw an
+      // uncaught error deep inside its style loader and silently wedged every GeoJSON source's
+      // worker round-trip for the rest of the session. Starting on the real basemap makes the
+      // follow-up setStyle() a same-style no-op via the style diffing both engines share instead.
+      style: getBasemapStyleUrl(activeBasemap),
       center: [storeCam.lon, storeCam.lat],
       zoom: storeCam.zoom,
       pitch: storeCam.pitch,
       bearing: storeCam.bearing,
-      // 60 is MapLibre's mercator-projection default; globe projection (the "3D" mode) wants a
-      // deeper tilt to read as a planetary view rather than a slightly-angled flat map.
+      // 60 is the mercator-projection default; globe projection (the "3D" mode) wants a deeper
+      // tilt to read as a planetary view rather than a slightly-angled flat map.
       maxPitch: 85,
       attributionControl: false,
-      // Needed so canvas.toBlob()/toDataURL() (PNG export) doesn't read a blanked buffer —
-      // WebGL clears the drawing buffer after each frame by default. alpha:true lets the
-      // deep-space area beyond the globe's silhouette show the starfield div behind the canvas.
-      canvasContextAttributes: { preserveDrawingBuffer: true, alpha: true },
+      // Needed so canvas.toBlob()/toDataURL() (PNG export) doesn't read a blanked buffer — WebGL
+      // clears the drawing buffer after each frame by default. Mapbox GL JS v3's MapOptions has no
+      // alpha/canvasContextAttributes escape hatch for a transparent canvas (MapLibre's fork
+      // added one), so
+      // the deep-space area beyond the globe's silhouette can no longer show the .map-starfield CSS
+      // div through the canvas — GLOBE_FOG's space-color/high-color (#05040f) is tone-matched to
+      // .map-starfield's background-color (#05040c, globals.css) so the seam isn't visually jarring.
+      preserveDrawingBuffer: true,
     });
     map.on("load", () => {
       // setProjection throws "Style is not done loading" if called before the style/sprite/glyphs
       // have finished loading — safe only once "load" has fired, not immediately after construction.
-      map.setProjection({ type: initialMapMode === "3d" ? "globe" : "mercator" });
-      applyGlobeSky(map, initialMapMode === "3d");
+      map.setProjection(initialMapMode === "3d" ? "globe" : "mercator");
+      applyGlobeFog(map, initialMapMode === "3d");
       addDataLayers(map);
       setMapReady(true);
     });
 
-    map.on("mousemove", (e: maplibregl.MapMouseEvent) => setMouseCoords({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
+    map.on("mousemove", (e: mapboxgl.MapMouseEvent) => setMouseCoords({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
     map.on("mouseout", () => setMouseCoords(null));
 
     map.on("moveend", () => {
@@ -550,7 +528,7 @@ export default function MapLibreMap({
       });
     });
 
-    const handlePick = (e: maplibregl.MapLayerMouseEvent) => {
+    const handlePick = (e: mapboxgl.MapLayerMouseEvent) => {
       const props = e.features?.[0]?.properties;
       if (props) {
         onSelectFacility(props);
@@ -565,14 +543,18 @@ export default function MapLibreMap({
     map.on("click", "gas-volume-extrusion", handlePick);
     map.on("click", "gas-pill-cap", handlePick);
 
-    const handleClusterClick = async (e: maplibregl.MapLayerMouseEvent) => {
+    const handleClusterClick = (e: mapboxgl.MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       const clusterId = feature?.properties?.cluster_id;
       if (clusterId == null) return;
-      const source = map.getSource(PLANTS_SOURCE) as maplibregl.GeoJSONSource;
-      const zoom = await source.getClusterExpansionZoom(clusterId);
+      const source = map.getSource(PLANTS_SOURCE) as mapboxgl.GeoJSONSource;
       const geometry = feature!.geometry as GeoJSON.Point;
-      map.easeTo({ center: geometry.coordinates as [number, number], zoom, duration: 500 });
+      // Mapbox GL JS's getClusterExpansionZoom is callback-style, unlike MapLibre's
+      // Promise-returning version.
+      source.getClusterExpansionZoom(clusterId, (err, zoom) => {
+        if (err || zoom == null) return;
+        map.easeTo({ center: geometry.coordinates as [number, number], zoom, duration: 500 });
+      });
     };
     map.on("click", "plants-cluster-circle", handleClusterClick);
     map.on("mouseenter", "plants-cluster-circle", () => (map.getCanvas().style.cursor = "pointer"));
@@ -580,7 +562,7 @@ export default function MapLibreMap({
 
     mapRef.current = map;
 
-    // MapLibre bakes in the container's size at construction time; if that size changes later
+    // Mapbox GL JS bakes in the container's size at construction time; if that size changes later
     // (side flyout opening/closing, a mode-toggle reflow, or the container simply not having its
     // final layout size yet on first paint) the canvas keeps rendering at the stale size — it can
     // go fully blank until something calls resize(). Watch the container directly.
@@ -596,26 +578,25 @@ export default function MapLibreMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2D/3D toggle — switches MapLibre's projection (mercator <-> globe) instead of swapping to a
+  // 2D/3D toggle — switches the engine's projection (mercator <-> globe) instead of swapping to a
   // second rendering engine. Nudges pitch toward a planetary-view tilt entering 3D, and back to
   // top-down leaving it, but only when the user hasn't already set a custom tilt of their own.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    map.setProjection({ type: mapMode === "3d" ? "globe" : "mercator" });
-    applyGlobeSky(map, mapMode === "3d");
+    map.setProjection(mapMode === "3d" ? "globe" : "mercator");
+    applyGlobeFog(map, mapMode === "3d");
     if (mapMode === "3d") {
       const easeTarget: { pitch?: number; zoom?: number } = {};
       if (map.getPitch() < 20) easeTarget.pitch = 40;
       // Both the store's default zoom (5) and the reset-camera zoom (3) sit too
       // close-in for the globe's curvature to read at all - pull back to a
       // planetary view on the 2D->3D transition so the globe is actually
-      // visible as a sphere, not just a tilted flat map. Confirmed via direct
-      // Map instance testing that MapLibre's globe projection permits negative
-      // zoom (down to ~-2, its style minZoom) with no "cover the container"
-      // floor the way mercator has (mercator clamps to ~0.39 regardless of
-      // viewport size or minZoom) - -1 gives a clearly curved, starfield-ringed
-      // globe without shrinking it to an illegible speck.
+      // visible as a sphere, not just a tilted flat map. -1 gave a clearly
+      // curved, starfield-ringed globe with no "cover the container" floor
+      // under MapLibre's globe projection; re-verify this holds identically
+      // under Mapbox GL JS v3's globe implementation during manual QA and
+      // adjust the target zoom constant if its clamping behavior differs.
       if (map.getZoom() > -1) easeTarget.zoom = -1;
       if (Object.keys(easeTarget).length > 0) map.easeTo({ ...easeTarget, duration: 900 });
     } else if (mapMode === "2d" && map.getPitch() > 0) {
@@ -633,10 +614,10 @@ export default function MapLibreMap({
     }
 
     const applyStyle = () => {
-      map.setStyle(buildBasemapStyle(activeBasemap));
+      map.setStyle(getBasemapStyleUrl(activeBasemap));
       map.once("styledata", () => {
         addDataLayers(map);
-        applyGlobeSky(map, useMapStore.getState().mapMode === "3d");
+        applyGlobeFog(map, useMapStore.getState().mapMode === "3d");
       });
     };
     applyStyle();
@@ -665,7 +646,7 @@ export default function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const regionSource = map.getSource(REGION_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const regionSource = map.getSource(REGION_SOURCE) as mapboxgl.GeoJSONSource | undefined;
     if (!regionSource) return;
     if (!regionBoundary) {
       regionSource.setData({ type: "FeatureCollection", features: [] });
@@ -689,10 +670,10 @@ export default function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const plantsSource = map.getSource(PLANTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    const plumeSource = map.getSource(PLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    const volumeSource = map.getSource(VOLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    const capSource = map.getSource(PILL_CAP_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const plantsSource = map.getSource(PLANTS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const plumeSource = map.getSource(PLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const volumeSource = map.getSource(VOLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+    const capSource = map.getSource(PILL_CAP_SOURCE) as mapboxgl.GeoJSONSource | undefined;
     if (!plantsSource || !plumeSource || !volumeSource || !capSource) return;
 
     const showPlantLayer = showPlants && showLayers.plants;
@@ -747,7 +728,7 @@ export default function MapLibreMap({
             geometry: { type: "Point", coordinates: [plume.lon, plume.lat] },
             properties: { ...metadata, color: colorHex, opacity: config.opacity, intensity: valueNorm, radius_m: plume.radiusM },
           });
-          // fill-extrusion-opacity has no data-driven (per-feature) variant in the MapLibre style
+          // fill-extrusion-opacity has no data-driven (per-feature) variant in the Mapbox GL JS style
           // spec (same limitation as heatmap-opacity above) — fold each gas layer's opacity into
           // the extrusion color's alpha channel instead, via an rgba() string.
           const rgb = hexToRgb(colorHex);
@@ -818,7 +799,7 @@ export default function MapLibreMap({
     if (!map || !mapReady || selectedMode !== "animated" || !(showHotspots && showLayers.heatmap)) return;
 
     const interval = setInterval(() => {
-      const source = map.getSource(PLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      const source = map.getSource(PLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
       if (!source) return;
       const t = Date.now() / 1000;
       const animated = plumeFeaturesRef.current.map((f, i) => {
@@ -843,7 +824,7 @@ export default function MapLibreMap({
 
   const syncCompletedShapes = () => {
     const map = mapRef.current;
-    const source = map?.getSource(COMPLETED_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const source = map?.getSource(COMPLETED_SOURCE) as mapboxgl.GeoJSONSource | undefined;
     source?.setData({
       type: "FeatureCollection",
       features: completedShapesRef.current,
@@ -861,7 +842,7 @@ export default function MapLibreMap({
     const map = mapRef.current;
     if (!map || !mapReady || drawingMode === "none") return;
 
-    const draftSource = () => map.getSource(DRAFT_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    const draftSource = () => map.getSource(DRAFT_SOURCE) as mapboxgl.GeoJSONSource | undefined;
     const setDraft = (features: GeoJSON.Feature[]) => draftSource()?.setData({ type: "FeatureCollection", features });
 
     let activePoints: { lat: number; lon: number }[] = [];
@@ -871,7 +852,7 @@ export default function MapLibreMap({
     const needsDblClickDisabled = drawingMode === "polyline" || drawingMode === "distance" || drawingMode === "polygon" || drawingMode === "area";
     if (needsDblClickDisabled) map.doubleClickZoom.disable();
 
-    const handleClick = (e: maplibregl.MapMouseEvent) => {
+    const handleClick = (e: mapboxgl.MapMouseEvent) => {
       const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
       const uuid = Math.random().toString(36).substring(2, 9);
 
@@ -913,7 +894,7 @@ export default function MapLibreMap({
       );
     };
 
-    const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
+    const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
       const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
 
       if (drawingMode === "picker") {
@@ -1017,7 +998,7 @@ export default function MapLibreMap({
   return (
     <div
       ref={mapWrapperRef}
-      data-map-viewport="maplibre"
+      data-map-viewport="mapbox"
       className="relative w-full h-full min-h-[40rem] rounded-xl overflow-hidden border border-ground-700 bg-ground-950"
     >
       {!mapReady && (
