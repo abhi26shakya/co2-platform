@@ -4,6 +4,10 @@
  */
 export const BASEMAP_TILES: Record<string, string[]> = {
   dark: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
+  // CARTO Positron — muted gray landmass, near-white ocean, minimal labels. Paired with the
+  // globe's dark starfield sky (map-starfield in globals.css) this reproduces the Climate
+  // TRACE-style "light planet floating in dark space" look.
+  light: ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
   satellite: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
   hybrid: [
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",

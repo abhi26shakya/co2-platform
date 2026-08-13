@@ -70,6 +70,8 @@ interface Props {
   onSelectYear: (y: string) => void;
   primaryGas: string;
   onSelectPrimaryGas: (g: string) => void;
+  colorMode: "gas" | "sector";
+  onColorModeChange: (m: "gas" | "sector") => void;
   mapMode: MapMode;
   onMapModeChange: (m: MapMode) => void;
   comparisonMode: boolean;
@@ -97,6 +99,8 @@ export function MapToolbar({
   onSelectYear,
   primaryGas,
   onSelectPrimaryGas,
+  colorMode,
+  onColorModeChange,
   mapMode,
   onMapModeChange,
   comparisonMode,
@@ -108,7 +112,14 @@ export function MapToolbar({
   const gasOptions = GASES.map((g) => ({ id: g.id, label: g.shortLabel }));
 
   return (
-    <div className="glass rounded-xl px-3 py-2.5 flex flex-wrap items-center gap-2">
+    // relative z-10 gives this its own stacking context with a real (positive) z-index - without
+    // it, none of this toolbar's ancestors set position+z-index, so its dropdowns (search
+    // results, "Fuel Type"/"Year"/"Gas" menus, all z-20/z-30 internally) end up competing for
+    // paint order against the map canvas below (which also has no stacking context of its own,
+    // position:absolute with z-index:auto) purely by DOM tree traversal order - and lost, since
+    // the map area div comes later in the page. A real positive z-index here always wins
+    // regardless of DOM order.
+    <div className="glass rounded-xl px-3 py-2.5 flex flex-wrap items-center gap-2 relative z-10">
       <button
         onClick={onToggleMenu}
         title="Layers, basemaps, GIS tools & export"
@@ -139,6 +150,20 @@ export function MapToolbar({
       <ToolbarDropdown label="Fuel Type" value={selectedFuelType} options={fuelOptions} onSelect={onSelectFuelType} />
       <ToolbarDropdown label="Year" value={selectedYear} options={yearOptions} onSelect={onSelectYear} />
       <ToolbarDropdown label="Gas" value={primaryGas} options={gasOptions} onSelect={onSelectPrimaryGas} />
+
+      <div className="glass-strong flex rounded-lg p-1 gap-0.5 select-none shrink-0" title="Color plants/plumes by gas intensity or industrial sector">
+        {(["gas", "sector"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => onColorModeChange(mode)}
+            className={`px-2.5 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+              colorMode === mode ? "bg-sensor/10 text-sensor" : "text-ground-400 hover:text-instrument"
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
 
       <div className="glass-strong flex rounded-lg p-1 gap-0.5 select-none shrink-0">
         {(["2d", "3d"] as const).map((id) => (

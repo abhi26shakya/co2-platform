@@ -8,6 +8,7 @@ export interface ShowLayers {
   boundaries: boolean;
   roads: boolean;
   clouds: boolean;
+  population: boolean;
 }
 
 const TOGGLES: { key: keyof ShowLayers; label: string }[] = [
@@ -18,6 +19,7 @@ const TOGGLES: { key: keyof ShowLayers; label: string }[] = [
   { key: "boundaries", label: "Political borders" },
   { key: "roads", label: "Roads & networks" },
   { key: "clouds", label: "Simulated Clouds" },
+  { key: "population", label: "Population density" },
 ];
 
 interface Props {

@@ -11,6 +11,7 @@ export interface VisualizationModeDef {
 
 export const VISUALIZATION_MODES: VisualizationModeDef[] = [
   { id: "volume3d", label: "3D Extruded Columns", modes: ["3d"] },
+  { id: "pill3d", label: "Pill Markers", modes: ["3d"] },
   { id: "heatmap", label: "Plume Heatmap", modes: ["2d", "3d"] },
   { id: "markers", label: "Point Markers", modes: ["2d", "3d"] },
   { id: "contours", label: "Contours (Isolines)", modes: ["2d", "3d"] },

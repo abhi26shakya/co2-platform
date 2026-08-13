@@ -12,6 +12,10 @@ export interface PlumePoint {
    *  (MapHotspot.radius_m) — how far its effect actually reaches on the ground, not a display
    *  constant. Drives the density layer's footprint size in maplibre-map.tsx. */
   radiusM: number;
+  /** Nearest-plant-derived sector (see enrich-plants.ts attachNearestSector), forwarded through
+   *  for sector-based color mode - undefined when the caller passes plain MapHotspot[] without
+   *  that enrichment step. */
+  sector?: string;
 }
 
 export function hexToRgb(hex: string) {
@@ -48,7 +52,7 @@ export function getGasColorHex(gas: string, val: number): string {
   return "#7f1d1d";
 }
 
-export function getGasPlumes(gas: string, baseHotspots: MapHotspot[]): PlumePoint[] {
+export function getGasPlumes(gas: string, baseHotspots: (MapHotspot & { sector?: string })[]): PlumePoint[] {
   return baseHotspots.map((h, i) => {
     let latOffset = 0;
     let lonOffset = 0;
@@ -89,6 +93,7 @@ export function getGasPlumes(gas: string, baseHotspots: MapHotspot[]): PlumePoin
       value: h.intensity * valueMultiplier,
       unit,
       radiusM: h.radius_m,
+      sector: h.sector,
     };
   });
 }

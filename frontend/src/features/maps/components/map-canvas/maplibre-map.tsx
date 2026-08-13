@@ -3,12 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+// MapLibre resolves its worker script from a URL computed relative to its own bundled module at
+// runtime (`new URL('./maplibre-gl-worker.mjs', import.meta.url)`), which several bundler/runtime
+// combinations (observed here under both webpack and Turbopack dev builds) fail to resolve to a
+// URL Next.js actually serves - the worker silently never starts, so every GeoJSON source
+// (plants, hotspots, markers, extrusion columns) hangs forever mid-load with correct data but
+// nothing rendered. Pointing at a real static copy (public/maplibre-gl-worker.mjs, copied from
+// node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs - keep in sync on maplibre-gl upgrades)
+// sidesteps that resolution entirely. Must run before any `maplibregl.Map` is constructed.
+maplibregl.setWorkerUrl("/maplibre-gl-worker.mjs");
 import { Compass } from "lucide-react";
 import { useMapStore, type SelectedFacility } from "@/features/maps/store/map-store";
 import type { MapHotspot, PlantOut } from "@/types/geo";
 import { CameraControls } from "@/features/maps/components/map-controls/camera-controls";
 import { BASEMAP_TILES, OVERLAY_TILES } from "@/features/maps/lib/basemap-tiles";
 import { getGasColorHex, getGasPlumes, hexToRgb, resolveComparisonColorHex } from "@/features/maps/lib/gas-plume";
+import { getSectorColorHex } from "@/features/maps/lib/sector-colors";
 import {
   buildCircleResult,
   buildPickerResult,
@@ -25,12 +36,16 @@ import type { DrawingMode } from "@/features/maps/hooks/use-drawing";
 import type { ShowLayers } from "@/features/maps/components/layer-panel/layer-toggle-overlay";
 
 interface Props {
-  plants: PlantOut[];
-  hotspots: MapHotspot[];
+  plants: (PlantOut & { sector?: string })[];
+  hotspots: (MapHotspot & { sector?: string })[];
   showPlants: boolean;
   showHotspots: boolean;
   selectedMode?: string;
   activeBasemap?: string;
+  /** "gas" (default) colors plumes/extrusion by gas-intensity gradient (real backend data);
+   *  "sector" colors everything by industrial sector instead (client-fabricated - see
+   *  sector-colors.ts / enrich-plants.ts). Additive alternate mode, not a replacement. */
+  colorMode?: "gas" | "sector";
   onSelectFacility?: (fac: SelectedFacility) => void;
   drawingMode?: DrawingMode;
   comparisonMode?: boolean;
@@ -40,6 +55,9 @@ interface Props {
   clearTrigger?: number;
   comparisonType?: string;
   cameraTarget?: { lat: number; lon: number } | null;
+  /** Selected search-result region (country/state, see regions.ts) - drawn as a highlighted
+   *  outline and fit into view. null clears the outline. */
+  regionBoundary?: { geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon; bbox: [number, number, number, number] } | null;
   legendOn?: boolean;
   onToggleLegend?: () => void;
 }
@@ -64,15 +82,18 @@ function applyGlobeSky(map: maplibregl.Map, is3d: boolean) {
 const PLANTS_SOURCE = "plants-source";
 const PLUME_SOURCE = "plume-source";
 const VOLUME_SOURCE = "gas-volume-source";
+const PILL_CAP_SOURCE = "gas-pill-cap-source";
 const DRAFT_SOURCE = "gis-draft-source";
 const COMPLETED_SOURCE = "gis-completed-source";
+const REGION_SOURCE = "region-boundary-source";
 const BOUNDARIES_SOURCE = "boundaries-overlay-source";
 const ROADS_SOURCE = "roads-overlay-source";
+const POPULATION_SOURCE = "population-overlay-source";
 
 /** Builds a small square footprint (~1.1km side) around a point so fill-extrusion has a polygon
  *  to extrude — MapLibre's "3D Extruded Columns" mode equivalent to Cesium's cylinder entities. */
 function buildColumnFootprint(lat: number, lon: number): number[][] {
-  const halfDeg = 0.005;
+  const halfDeg = 0.003;
   const latRad = (lat * Math.PI) / 180;
   const lonHalf = halfDeg / Math.max(0.15, Math.cos(latRad));
   return [
@@ -82,6 +103,24 @@ function buildColumnFootprint(lat: number, lon: number): number[][] {
     [lon - lonHalf, lat + halfDeg],
     [lon - lonHalf, lat - halfDeg],
   ];
+}
+
+/** Builds a many-sided polygon approximating a circle, for the "Pill Markers" mode's rounded
+ *  cap - a second fill-extrusion stacked on top of the thin gas-volume-extrusion shaft (same
+ *  base/height trick used to place it at the correct altitude, since a MapLibre circle *layer*
+ *  has no way to sit at an elevation matching an extrusion's height; only another extrusion
+ *  polygon can). Wider than the shaft's own square footprint so it visibly overhangs as a cap. */
+function buildCircularCapFootprint(lat: number, lon: number): number[][] {
+  const radiusDeg = 0.006;
+  const latRad = (lat * Math.PI) / 180;
+  const lonScale = 1 / Math.max(0.15, Math.cos(latRad));
+  const sides = 12;
+  const coords: number[][] = [];
+  for (let i = 0; i <= sides; i++) {
+    const angle = (i / sides) * Math.PI * 2;
+    coords.push([lon + Math.cos(angle) * radiusDeg * lonScale, lat + Math.sin(angle) * radiusDeg]);
+  }
+  return coords;
 }
 
 /** Builds a raster style for the given basemap id. */
@@ -134,25 +173,15 @@ function addDataLayers(map: maplibregl.Map) {
       },
     });
     map.addLayer({
-      id: "plants-cluster-count",
-      type: "symbol",
-      source: PLANTS_SOURCE,
-      filter: ["has", "point_count"],
-      layout: {
-        "text-field": ["get", "point_count_abbreviated"],
-        "text-size": 11,
-        "text-font": ["Noto Sans Bold"],
-      },
-      paint: { "text-color": "#09090b" },
-    });
-    map.addLayer({
       id: "plants-circle",
       type: "circle",
       source: PLANTS_SOURCE,
       filter: ["!", ["has", "point_count"]],
       paint: {
         "circle-radius": 6,
-        "circle-color": "#10b981",
+        // Data-driven so the "Render plants" effect can flip between the plain green dot and
+        // sector-based coloring (colorMode prop) per-feature without rebuilding the layer.
+        "circle-color": ["coalesce", ["get", "color"], "#10b981"],
         "circle-stroke-color": "#000000",
         "circle-stroke-width": 1.5,
       },
@@ -191,6 +220,28 @@ function addDataLayers(map: maplibregl.Map) {
       source: ROADS_SOURCE,
       layout: { visibility: "none" },
       paint: { "raster-opacity": 0.35 },
+    });
+  }
+  if (!map.getSource(POPULATION_SOURCE)) {
+    // WorldPop's ImageServer has no pre-generated tile cache (its plain /tile/{z}/{y}/{x} path
+    // 404s), only the WMS-style exportImage operation - {bbox-epsg-3857} is MapLibre's standard
+    // placeholder for exactly that pattern (same trick as any WMS raster source), verified
+    // working directly (HTTP 200, image/png) before wiring this up. No API key/account needed,
+    // unlike Mapbox's population-density offering (which isn't a ready-made tileset anyway - it'd
+    // need its own from-scratch data pipeline, see the plan doc).
+    map.addSource(POPULATION_SOURCE, {
+      type: "raster",
+      tiles: [
+        "https://worldpop.arcgis.com/arcgis/rest/services/WorldPop_Population_Density_1km/ImageServer/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=256,256&format=png32&f=image",
+      ],
+      tileSize: 256,
+    });
+    map.addLayer({
+      id: "population-overlay",
+      type: "raster",
+      source: POPULATION_SOURCE,
+      layout: { visibility: "none" },
+      paint: { "raster-opacity": 0.55 },
     });
   }
 
@@ -253,6 +304,32 @@ function addDataLayers(map: maplibregl.Map) {
         "circle-opacity": ["get", "opacity"],
         "circle-stroke-color": "#000000",
         "circle-stroke-width": 1.5,
+      },
+    });
+    // "Pill Markers" mode — a rounded cap sitting on top of the existing thin fill-extrusion
+    // shaft (gas-volume-extrusion, same VOLUME_SOURCE footprint below it), approximating Climate
+    // TRACE's rounded-capsule 3D markers. MapLibre's fill-extrusion only produces flat-topped
+    // prisms (no native capsule geometry) and a true 3D mesh would need a custom WebGL layer -
+    // the kind of engine complexity KI-004 deliberately retired (Cesium/three.js removal). A
+    // plain `circle` layer can't substitute for the cap either - it has no way to sit at an
+    // elevation matching the shaft's height (circles always render at ground level), so the cap
+    // is a *second* fill-extrusion instead: a wider, many-sided polygon
+    // (buildCircularCapFootprint) stacked exactly on top of the shaft via its own
+    // fill-extrusion-base/-height (set to [shaft height, shaft height + cap thickness] per
+    // feature in the render effect below).
+    if (!map.getSource(PILL_CAP_SOURCE)) {
+      map.addSource(PILL_CAP_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    }
+    map.addLayer({
+      id: "gas-pill-cap",
+      type: "fill-extrusion",
+      source: PILL_CAP_SOURCE,
+      layout: { visibility: "none" },
+      paint: {
+        "fill-extrusion-color": ["get", "color"],
+        "fill-extrusion-base": ["get", "base"],
+        "fill-extrusion-height": ["get", "height"],
+        "fill-extrusion-opacity": 0.95,
       },
     });
     map.addLayer({
@@ -345,6 +422,24 @@ function addDataLayers(map: maplibregl.Map) {
     });
   }
 
+  // Selected region boundary (country/state search result, see regions.ts) - white outline with
+  // a very faint fill, matching Climate TRACE's "click a region -> highlighted outline" look.
+  if (!map.getSource(REGION_SOURCE)) {
+    map.addSource(REGION_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    map.addLayer({
+      id: "region-boundary-fill",
+      type: "fill",
+      source: REGION_SOURCE,
+      paint: { "fill-color": "#ffffff", "fill-opacity": 0.06 },
+    });
+    map.addLayer({
+      id: "region-boundary-line",
+      type: "line",
+      source: REGION_SOURCE,
+      paint: { "line-color": "#ffffff", "line-width": 2 },
+    });
+  }
+
   if (!map.getSource(DRAFT_SOURCE)) {
     map.addSource(DRAFT_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     map.addLayer({
@@ -371,15 +466,17 @@ export default function MapLibreMap({
   showHotspots,
   selectedMode = "heatmap",
   activeBasemap = "dark",
+  colorMode = "gas",
   onSelectFacility = () => {},
   drawingMode = "none",
   comparisonMode = false,
-  showLayers = { plants: true, heatmap: true, contours: true, prediction: true, boundaries: false, roads: false, clouds: false },
+  showLayers = { plants: true, heatmap: true, contours: true, prediction: true, boundaries: false, roads: false, clouds: false, population: false },
   onDrawingComplete = () => {},
   onLiveMeasurement = () => {},
   clearTrigger = 0,
   comparisonType = "split-screen",
   cameraTarget = null,
+  regionBoundary = null,
   legendOn = false,
   onToggleLegend,
 }: Props) {
@@ -388,6 +485,11 @@ export default function MapLibreMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const completedShapesRef = useRef<GeoFeature[]>([]);
   const plumeFeaturesRef = useRef<GeoJSON.Feature[]>([]);
+  // Skips the "Basemap swap" effect's very first run (right after mount, when mapReady flips
+  // true) - the map is already constructed with this exact basemap's style, so re-applying it
+  // there was a redundant second setStyle() call racing the constructor's still-loading initial
+  // style. See the mount effect's comment for what that raced into.
+  const skipInitialBasemapSwap = useRef(true);
   const [mapReady, setMapReady] = useState(false);
   const [mouseCoords, setMouseCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [fullscreenError, setFullscreenError] = useState<string | null>(null);
@@ -403,7 +505,16 @@ export default function MapLibreMap({
     const initialMapMode = useMapStore.getState().mapMode;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: buildBasemapStyle("dark"),
+      // Must match whatever the "Basemap swap" effect below will apply once `mapReady` flips true
+      // - constructing with a different style than `activeBasemap` used to mean that effect fired
+      // a real (non-diffable) setStyle() call microseconds after the initial style's "load" event,
+      // racing its own in-flight sprite/glyph request teardown. That threw an uncaught
+      // "Cannot read properties of undefined (reading 'signal')" deep inside MapLibre's style
+      // loader, which silently wedged every GeoJSON source's worker round-trip for the rest of the
+      // session - sources never finished tiling, so nothing (plants, hotspots, markers, extrusion
+      // columns) ever rendered, despite correct data reaching the source. Starting on the real
+      // basemap makes the follow-up setStyle() a same-style no-op via MapLibre's diffing instead.
+      style: buildBasemapStyle(activeBasemap),
       center: [storeCam.lon, storeCam.lat],
       zoom: storeCam.zoom,
       pitch: storeCam.pitch,
@@ -452,6 +563,7 @@ export default function MapLibreMap({
     map.on("click", "gas-contour-outer", handlePick);
     map.on("click", "gas-animated-pulse", handlePick);
     map.on("click", "gas-volume-extrusion", handlePick);
+    map.on("click", "gas-pill-cap", handlePick);
 
     const handleClusterClick = async (e: maplibregl.MapLayerMouseEvent) => {
       const feature = e.features?.[0];
@@ -515,6 +627,10 @@ export default function MapLibreMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    if (skipInitialBasemapSwap.current) {
+      skipInitialBasemapSwap.current = false;
+      return;
+    }
 
     const applyStyle = () => {
       map.setStyle(buildBasemapStyle(activeBasemap));
@@ -545,6 +661,30 @@ export default function MapLibreMap({
     map.flyTo({ center: [cameraTarget.lon, cameraTarget.lat], zoom: Math.max(map.getZoom(), 10), duration: 2000 });
   }, [cameraTarget, mapReady]);
 
+  // Selected region boundary (search result) - draw the outline and fit it into view.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const regionSource = map.getSource(REGION_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!regionSource) return;
+    if (!regionBoundary) {
+      regionSource.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    regionSource.setData({
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: regionBoundary.geometry, properties: {} }],
+    });
+    const [minLon, minLat, maxLon, maxLat] = regionBoundary.bbox;
+    map.fitBounds(
+      [
+        [minLon, minLat],
+        [maxLon, maxLat],
+      ],
+      { padding: 60, duration: 1500 }
+    );
+  }, [regionBoundary, mapReady]);
+
   // Render plants + gas plumes
   useEffect(() => {
     const map = mapRef.current;
@@ -552,7 +692,8 @@ export default function MapLibreMap({
     const plantsSource = map.getSource(PLANTS_SOURCE) as maplibregl.GeoJSONSource | undefined;
     const plumeSource = map.getSource(PLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
     const volumeSource = map.getSource(VOLUME_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!plantsSource || !plumeSource || !volumeSource) return;
+    const capSource = map.getSource(PILL_CAP_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!plantsSource || !plumeSource || !volumeSource || !capSource) return;
 
     const showPlantLayer = showPlants && showLayers.plants;
     plantsSource.setData({
@@ -571,6 +712,7 @@ export default function MapLibreMap({
               confidence: p.co2_soundings ? "91%" : "n/a",
               satellite: "Sentinel-5P",
               dataset: "Sentinel-5P scene",
+              color: colorMode === "sector" ? getSectorColorHex(p.sector) : null,
             },
           }))
         : [],
@@ -579,6 +721,7 @@ export default function MapLibreMap({
     const showPlumeLayer = showHotspots && showLayers.heatmap;
     const plumeFeatures: GeoJSON.Feature[] = [];
     const volumeFeatures: GeoJSON.Feature[] = [];
+    const capFeatures: GeoJSON.Feature[] = [];
     if (showPlumeLayer) {
       const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
       activeGasKeys.forEach((gasKey) => {
@@ -586,7 +729,7 @@ export default function MapLibreMap({
         const plumes = getGasPlumes(gasKey, hotspots);
         plumes.forEach((plume) => {
           const valueNorm = Math.min(1, plume.intensity);
-          const baseColorHex = getGasColorHex(gasKey, valueNorm);
+          const baseColorHex = colorMode === "sector" ? getSectorColorHex(plume.sector) : getGasColorHex(gasKey, valueNorm);
           const colorHex = resolveComparisonColorHex(baseColorHex, plume, comparisonMode, comparisonType);
           const metadata = {
             name: `Detected ${gasKey.toUpperCase()} Plume`,
@@ -609,16 +752,23 @@ export default function MapLibreMap({
           // the extrusion color's alpha channel instead, via an rgba() string.
           const rgb = hexToRgb(colorHex);
           const volumeColorRgba = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})` : colorHex;
+          const shaftHeight = 4000 + valueNorm * 90000;
           volumeFeatures.push({
             type: "Feature",
             geometry: { type: "Polygon", coordinates: [buildColumnFootprint(plume.lat, plume.lon)] },
-            properties: { ...metadata, color: volumeColorRgba, height: 3000 + valueNorm * 45000 },
+            properties: { ...metadata, color: volumeColorRgba, height: shaftHeight },
+          });
+          capFeatures.push({
+            type: "Feature",
+            geometry: { type: "Polygon", coordinates: [buildCircularCapFootprint(plume.lat, plume.lon)] },
+            properties: { ...metadata, color: volumeColorRgba, base: shaftHeight, height: shaftHeight + 3000 },
           });
         });
       });
     }
     plumeSource.setData({ type: "FeatureCollection", features: plumeFeatures });
     volumeSource.setData({ type: "FeatureCollection", features: volumeFeatures });
+    capSource.setData({ type: "FeatureCollection", features: capFeatures });
     plumeFeaturesRef.current = plumeFeatures;
 
     const activeGasPlumeLayer =
@@ -628,15 +778,21 @@ export default function MapLibreMap({
           ? "contours"
           : selectedMode === "volume3d"
             ? "volume3d"
-            : selectedMode === "animated"
-              ? "animated"
-              : "gas-heatmap";
+            : selectedMode === "pill3d"
+              ? "pill3d"
+              : selectedMode === "animated"
+                ? "animated"
+                : "gas-heatmap";
     const visibility = (id: string, show: boolean) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
     };
     visibility("gas-heatmap", showPlumeLayer && activeGasPlumeLayer === "gas-heatmap");
     visibility("gas-markers", showPlumeLayer && activeGasPlumeLayer === "gas-markers");
-    visibility("gas-volume-extrusion", showPlumeLayer && activeGasPlumeLayer === "volume3d");
+    visibility(
+      "gas-volume-extrusion",
+      showPlumeLayer && (activeGasPlumeLayer === "volume3d" || activeGasPlumeLayer === "pill3d")
+    );
+    visibility("gas-pill-cap", showPlumeLayer && activeGasPlumeLayer === "pill3d");
     visibility("gas-animated-pulse", showPlumeLayer && activeGasPlumeLayer === "animated");
     visibility(
       "gas-markers-glow",
@@ -651,7 +807,8 @@ export default function MapLibreMap({
     visibility("plants-prediction-label", showPlantLayer && showLayers.prediction);
     visibility("boundaries-overlay", showLayers.boundaries);
     visibility("roads-overlay", showLayers.roads);
-  }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, mapReady]);
+    visibility("population-overlay", showLayers.population);
+  }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, colorMode, mapReady]);
 
   // Animated Pulse mode — recomputes radius/opacity on an interval from the last-built plume
   // features (plumeFeaturesRef, set by the effect above) rather than rebuilding gas plume data

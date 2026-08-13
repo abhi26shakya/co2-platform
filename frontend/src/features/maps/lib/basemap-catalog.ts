@@ -7,6 +7,7 @@ export interface BasemapDef {
 }
 
 export const BASEMAPS: BasemapDef[] = [
+  { id: "light", label: "Light style", modes: ["2d", "3d"] },
   { id: "dark", label: "Dark style", modes: ["2d", "3d"] },
   { id: "satellite", label: "Satellite", modes: ["2d", "3d"] },
   { id: "hybrid", label: "Hybrid", modes: ["2d", "3d"] },

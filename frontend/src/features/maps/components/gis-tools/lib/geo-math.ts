@@ -62,6 +62,35 @@ export function circleAreaM2(radiusM: number): number {
 
 /** Great-circle distance between two lat/lon points — used by the 2D (MapLibre) engine, which has no
  *  Cesium.Cartesian3.distance equivalent since it works in lng/lat rather than a 3D ellipsoid frame. */
+/** Ray-casting point-in-polygon test (even-odd rule) for a single ring, [lon, lat] pairs as
+ *  GeoJSON coordinates use. Used to filter facilities/hotspots down to a selected region
+ *  boundary (see regions.ts) - accurate enough for country/state-sized polygons at this app's
+ *  scale, no need for a full geodesic library. */
+function pointInRing(lon: number, lat: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersects = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+/** Tests a point against a GeoJSON Polygon or MultiPolygon geometry (first ring of each polygon
+ *  is the outer boundary; subsequent rings are holes, handled via the even-odd rule per-ring). */
+export function pointInPolygon(point: LatLon, geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon): boolean {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  for (const rings of polygons) {
+    let inside = pointInRing(point.lon, point.lat, rings[0]);
+    for (let i = 1; i < rings.length; i++) {
+      if (pointInRing(point.lon, point.lat, rings[i])) inside = false;
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
 export function haversineDistanceM(a: LatLon, b: LatLon): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);

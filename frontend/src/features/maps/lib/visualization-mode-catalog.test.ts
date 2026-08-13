@@ -10,7 +10,7 @@ describe("visualizationModesForMode", () => {
 
   it("includes every mode in 3d mode", () => {
     const ids = visualizationModesForMode("3d").map((m) => m.id);
-    expect(ids).toEqual(["volume3d", "heatmap", "markers", "contours", "animated"]);
+    expect(ids).toEqual(["volume3d", "pill3d", "heatmap", "markers", "contours", "animated"]);
   });
 });
 

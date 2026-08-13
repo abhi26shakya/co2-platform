@@ -9,8 +9,16 @@ import { useMapStore } from "@/features/maps/store/map-store";
 import { useMapUiStore, type LeftPanelId } from "@/features/maps/store/map-ui-store";
 import { useDrawing } from "@/features/maps/hooks/use-drawing";
 import { useMapExport } from "@/features/maps/hooks/use-map-export";
-import { enrichPlants, buildFacilityHistoricalSeries, timeScaleFactor } from "@/features/maps/lib/enrich-plants";
+import {
+  enrichPlants,
+  attachNearestSector,
+  dedupePlantsByLocation,
+  buildFacilityHistoricalSeries,
+  timeScaleFactor,
+} from "@/features/maps/lib/enrich-plants";
 import { buildFacilityList, buildSearchResults, type MapSearchResult } from "@/features/maps/lib/search";
+import { fetchStateBoundaries, searchStateBoundaries, type RegionBoundary } from "@/features/maps/lib/regions";
+import { pointInPolygon } from "@/features/maps/components/gis-tools/lib/geo-math";
 import { DEFAULT_2D_VISUALIZATION_MODE, isModeSupported } from "@/features/maps/lib/visualization-mode-catalog";
 import { DEFAULT_2D_BASEMAP, isBasemapSupported } from "@/features/maps/lib/basemap-catalog";
 import { buildShareLink } from "@/features/maps/lib/share-link";
@@ -53,12 +61,13 @@ const TIMELINE_TICKS: Record<TimelinePeriod, string[]> = {
 
 const DEFAULT_SHOW_LAYERS: ShowLayers = {
   plants: true,
-  heatmap: true,
+  heatmap: false,
   contours: true,
   prediction: true,
   boundaries: false,
   roads: false,
   clouds: false,
+  population: false,
 };
 
 const PANEL_TABS: { id: Exclude<LeftPanelId, null>; label: string; icon: typeof Globe }[] = [
@@ -95,6 +104,9 @@ export default function MapPage() {
   const effectiveBasemap = isBasemapSupported(activeBasemap, mapMode) ? activeBasemap : DEFAULT_2D_BASEMAP;
   const [showLayers, setShowLayers] = useState<ShowLayers>(DEFAULT_SHOW_LAYERS);
   const [legendOpen, setLegendOpen] = useState(true);
+  // "sector" colors plants/plumes/extrusion by industrial sector (Climate TRACE-style) instead
+  // of gas-intensity; additive alternate mode, see colorMode prop docs on MapLibreMap.
+  const [colorMode, setColorMode] = useState<"gas" | "sector">("gas");
 
   const [timelinePeriod, setTimelinePeriod] = useState<TimelinePeriod>("monthly");
   const [sliderIndex, setSliderIndex] = useState(2);
@@ -123,6 +135,7 @@ export default function MapPage() {
     emission_tonnes_per_year: h.emission_tonnes_per_year ? Math.round(h.emission_tonnes_per_year * timeFactor) : 4500,
     intensity: Math.min(1.0, Math.max(0.1, h.intensity * timeFactor)),
   }));
+  const sectorizedHotspots = attachNearestSector(timeScaledHotspots, filteredPlants);
 
   let inspectedFacility: InspectedFacility | null = null;
   if (selectedFacility) {
@@ -154,10 +167,45 @@ export default function MapPage() {
     return () => clearInterval(interval);
   }, [isTimelinePlaying, playbackSpeed, ticks.length]);
 
-  const searchResults = buildSearchResults(filteredPlants, hotspots, searchQuery);
+  const [selectedRegion, setSelectedRegion] = useState<RegionBoundary | null>(null);
+  const regionFilteredCount = selectedRegion
+    ? filteredPlants.filter((p) => pointInPolygon({ lat: p.lat, lon: p.lon }, selectedRegion.geometry)).length
+    : filteredPlants.length;
+
+  // Once a country is selected, its prefetched state/province boundaries (see
+  // handleSelectSearchResult) become searchable too - e.g. typing "Maharashtra" after selecting
+  // India surfaces it here alongside the usual plant/hotspot/country matches.
+  const stateResults: MapSearchResult[] =
+    selectedRegion?.type === "country" && selectedRegion.iso3
+      ? searchStateBoundaries(selectedRegion.iso3, searchQuery).map((s) => ({
+          type: "region" as const,
+          id: `region-state-${s.name}`,
+          name: s.name,
+          country: selectedRegion.name,
+          details: `${selectedRegion.name} · State boundary`,
+          lat: (s.bbox[1] + s.bbox[3]) / 2,
+          lon: (s.bbox[0] + s.bbox[2]) / 2,
+          raw: s,
+        }))
+      : [];
+  const searchResults = [...stateResults, ...buildSearchResults(filteredPlants, hotspots, searchQuery)];
   const allFacilities = buildFacilityList(filteredPlants);
 
   const handleSelectSearchResult = (result: MapSearchResult) => {
+    if (result.type === "region") {
+      const region = result.raw as RegionBoundary;
+      setSelectedRegion(region);
+      setSearchQuery(result.name);
+      // Prefetches this country's state/province boundaries into regions.ts's in-memory cache so
+      // that typing a state name next (e.g. after selecting "India") can resolve immediately via
+      // searchStateBoundaries - fire-and-forget, a failed/unavailable fetch just means no
+      // state-level results show up later, not a broken search.
+      if (region.type === "country" && region.iso3) {
+        fetchStateBoundaries(region.iso3).catch(() => {});
+      }
+      return;
+    }
+    setSelectedRegion(null);
     setSelectedFacility(result.raw);
     setSearchQuery(result.name);
     setCameraTarget({ lat: result.lat, lon: result.lon });
@@ -209,7 +257,10 @@ export default function MapPage() {
         menuOpen={!!activePanel}
         onToggleMenu={() => setActivePanel(activePanel ? null : "layers")}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={(q) => {
+          setSearchQuery(q);
+          setSelectedRegion(null);
+        }}
         searchResults={searchResults}
         allFacilities={allFacilities}
         onSelectSearchResult={handleSelectSearchResult}
@@ -221,6 +272,8 @@ export default function MapPage() {
         onSelectYear={setSelectedYear}
         primaryGas={toolbarPrimaryGas}
         onSelectPrimaryGas={handleToolbarPrimaryGas}
+        colorMode={colorMode}
+        onColorModeChange={setColorMode}
         mapMode={mapMode}
         onMapModeChange={setMapMode}
         comparisonMode={comparisonMode}
@@ -289,12 +342,13 @@ export default function MapPage() {
         </MapSidebar>
 
         <MapCanvas
-          plants={filteredPlants}
-          hotspots={timeScaledHotspots}
+          plants={dedupePlantsByLocation(filteredPlants)}
+          hotspots={sectorizedHotspots}
           showPlants={showLayers.plants}
           showHotspots={showLayers.heatmap}
           selectedMode={effectiveVisualizationMode}
           activeBasemap={effectiveBasemap}
+          colorMode={colorMode}
           onSelectFacility={(fac) => {
             setSelectedFacility(fac);
             if (fac.lat != null && fac.lon != null) {
@@ -310,6 +364,7 @@ export default function MapPage() {
           clearTrigger={drawing.clearTrigger}
           comparisonType={comparisonType}
           cameraTarget={cameraTarget}
+          regionBoundary={selectedRegion}
           legendOn={legendOpen}
           onToggleLegend={() => setLegendOpen((v) => !v)}
         />
@@ -327,7 +382,11 @@ export default function MapPage() {
         {legendOpen && <IntensityLegend gases={gases} showGasLayer={showLayers.heatmap} />}
         {showLayers.clouds && <CloudsOverlay />}
 
-        <MapSummaryCard analytics={analytics} sourceCount={filteredPlants.length} periodLabel={selectedYear} />
+        <MapSummaryCard
+          analytics={analytics}
+          sourceCount={regionFilteredCount}
+          periodLabel={selectedRegion ? `${selectedRegion.name}` : selectedYear}
+        />
       </div>
 
       <TimelineBar

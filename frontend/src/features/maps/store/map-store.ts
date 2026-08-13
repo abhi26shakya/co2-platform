@@ -70,9 +70,9 @@ const STORAGE_KEY_MAP_MODE = "emissia-map-mode";
 
 const getSavedBasemap = (): string => {
   if (typeof window !== "undefined") {
-    return localStorage.getItem(STORAGE_KEY_BASEMAP) || "dark";
+    return localStorage.getItem(STORAGE_KEY_BASEMAP) || "light";
   }
-  return "dark";
+  return "light";
 };
 
 const getSavedMapMode = (): MapMode => {
@@ -80,11 +80,11 @@ const getSavedMapMode = (): MapMode => {
     const saved = localStorage.getItem(STORAGE_KEY_MAP_MODE);
     if (saved === "2d" || saved === "3d") return saved;
   }
-  // Temporary stopgap: 3D (Cesium) reliably crashes the browser tab on the deployed Vercel
-  // build (reproduced consistently, root cause not yet identified — works fine against a local
-  // dev server, so likely something production-build-specific). Defaulting new users to 2D
-  // avoids greeting them with a crash; users can still opt into 3D manually via the toggle.
-  return "2d";
+  // 3D used to default off as a stopgap around a Cesium-specific Vercel crash (see KI-004 in
+  // .claude/docs/KNOWN_ISSUES.md) — Cesium has since been retired in favor of MapLibre's native
+  // globe projection, and production re-verification (2026-08-13) found no crash. New users now
+  // land on the 3D globe, matching the Climate TRACE-style default view.
+  return "3d";
 };
 
 const getSavedCamera = (): CameraState => {
