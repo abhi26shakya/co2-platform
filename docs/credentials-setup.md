@@ -55,6 +55,13 @@ Steps:
    directory mount so it works whether or not the real key file exists yet
    (an empty `secrets/` dir is fine; `gee_configured` just stays `false`).
 
+   Note: under `docker compose up`, the `backend`/`ml-service` service
+   blocks in `docker-compose.yml` read these values via Compose variable
+   interpolation, not directly from `backend/.env`/`ml-service/.env`. Export
+   the same `CO2_*`/`CO2ML_*` names in your shell, or put them in a `.env`
+   file at the repo root (Compose auto-loads that one), before running
+   `docker compose up`.
+
 ## 2. NASA Earthdata login (for OCO-3 granule downloads via `earthaccess`)
 
 1. Register a free account at
