@@ -10,7 +10,7 @@ class FakeTileFetcher:
         self._raises = raises
         self.calls: list[tuple[float, float]] = []
 
-    def fetch_no2_so2_tile(self, *, lat: float, lon: float, year: int):
+    def fetch_no2_so2_viirs_tile(self, *, lat: float, lon: float, year: int):
         self.calls.append((lat, lon))
         if self._raises:
             raise self._raises
