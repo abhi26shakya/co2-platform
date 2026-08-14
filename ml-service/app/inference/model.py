@@ -1,12 +1,19 @@
-"""CombinedPredictor: Track B (NO2/SO2 CNN detection) + Track A (OCO-3
-mass-balance estimate, looked up from backend). See PredictionResultV2's
-docstring (backend/app/schemas/prediction.py) for what data_source means.
+"""CombinedPredictor: Track B (NO2/SO2/VIIRS CNN detection) + Track A
+(OCO-3 mass-balance estimate, looked up from backend). See
+PredictionResultV2's docstring (backend/app/schemas/prediction.py) for
+what data_source means.
 
 Not wired in as the default PREDICTOR yet (see app/main.py) - it degrades
 gracefully (never throws out of predict()) but with no GEE credentials and
 no trained weights, its real-world output today is always
 data_source="unavailable". Flip CO2ML_PREDICTOR=combined once both are
 provisioned (docs/credentials-setup.md, ml-service/weights/README.md).
+
+Detector upgraded from a 2-channel (NO2, SO2) placeholder architecture
+(never actually trained - weights/detector2.pt was never produced) to
+Detector3, the research repo's actual trained, exhaustive-LOFO-evaluated
+detector (69.1% recall, NO2+SO2+VIIRS) - see weights/README.md's
+Provenance section.
 """
 import logging
 from pathlib import Path
@@ -21,13 +28,13 @@ from app.schemas import Hotspot, ModelInfo, PredictionRequest, PredictionResultV
 logger = logging.getLogger("ml-service.combined_predictor")
 
 MODEL_VERSION = "combined-v1"
-DEFAULT_WEIGHTS_PATH = Path(__file__).resolve().parent.parent.parent / "weights" / "detector2.pt"
+DEFAULT_WEIGHTS_PATH = Path(__file__).resolve().parent.parent.parent / "weights" / "detector3.pt"
 DEFAULT_TILE_YEAR = 2024
 MAX_PLANT_DISTANCE_KM = 25.0
 
 
 class TileFetcher(Protocol):
-    def fetch_no2_so2_tile(self, *, lat: float, lon: float, year: int): ...
+    def fetch_no2_so2_viirs_tile(self, *, lat: float, lon: float, year: int): ...
 
 
 class PlantLookup(Protocol):
@@ -45,20 +52,20 @@ class TileScorer(Protocol):
 
 
 class _TorchCnnScorer:
-    """Wraps the trained Detector2 model. Architecture must match
-    ml-service/training/train_2channel.py exactly - loading a state_dict
-    into a mismatched architecture fails loudly (shape mismatch), not
-    silently."""
+    """Wraps the trained Detector3 model. Architecture must match the
+    research repo's train_3channel.py / gradcam_3channel.py Detector3
+    exactly - loading a state_dict into a mismatched architecture fails
+    loudly (shape mismatch), not silently."""
 
     def __init__(self, weights_path: Path) -> None:
         import torch
         import torch.nn as nn
 
-        class Detector2(nn.Module):
+        class Detector3(nn.Module):
             def __init__(self) -> None:
                 super().__init__()
                 self.net = nn.Sequential(
-                    nn.Conv2d(2, 16, 3, padding=1),
+                    nn.Conv2d(3, 16, 3, padding=1),
                     nn.BatchNorm2d(16),
                     nn.SiLU(),
                     nn.MaxPool2d(2),
@@ -79,7 +86,7 @@ class _TorchCnnScorer:
                 return self.net(x)
 
         self._torch = torch
-        self._model = Detector2()
+        self._model = Detector3()
         self._model.load_state_dict(
             torch.load(weights_path, map_location="cpu", weights_only=True)
         )
@@ -130,14 +137,23 @@ class CombinedPredictor:
         return ModelInfo(
             name="co2-combined-oco3-cnn",
             version=MODEL_VERSION,
-            architecture="NO2/SO2 2-channel CNN detector + OCO-3 mass-balance estimate",
-            # Metrics from the research repo's own Week 4 evaluation logs, not
-            # re-verified in this deployment - treat as indicative, not certified.
+            architecture="NO2/SO2/VIIRS 3-channel CNN detector (Detector3) + OCO-3 mass-balance estimate",
+            # recall is the research repo's own exhaustive leave-one-
+            # facility-out (LOFO) evaluation - 22 folds, every facility
+            # held out once and retrained from scratch, mean recall
+            # 69.1% (data/lofo_track_a_results.json in that repo). The
+            # single-split accuracy/recall figures reported earlier in
+            # that repo's history (88%) are NOT used here - they were
+            # later shown to substantially overstate true generalization
+            # (see RESEARCH_PAPER.md Sec 5.1/6 there). accuracy/precision/
+            # f1_score are left at 0.0 - deliberately not fabricated, since
+            # that repo never reported a single-number accuracy/precision/
+            # F1 for this specific checkpoint, only LOFO recall.
             accuracy=0.0,
             precision=0.0,
-            recall=0.0,
+            recall=0.691,
             f1_score=0.0,
-            last_trained="unknown",
+            last_trained="see weights/README.md Provenance",
         )
 
     def predict(self, request: PredictionRequest) -> PredictionResultV2:
@@ -198,7 +214,9 @@ class CombinedPredictor:
         if self._cnn is None:
             return 0.0
         try:
-            tile = self._tile_fetcher.fetch_no2_so2_tile(lat=lat, lon=lon, year=DEFAULT_TILE_YEAR)
+            tile = self._tile_fetcher.fetch_no2_so2_viirs_tile(
+                lat=lat, lon=lon, year=DEFAULT_TILE_YEAR
+            )
             return self._cnn.score(tile) * 100
         except CredentialsNotConfiguredError:
             logger.info("GEE not configured - Track B skipped for this request.")

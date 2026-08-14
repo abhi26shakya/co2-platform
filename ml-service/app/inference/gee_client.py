@@ -1,13 +1,19 @@
-"""Fetches the 2-channel (NO2, SO2) Earth Engine tile the CNN (Track B)
-expects, centered on a point - not the uploaded image at all.
+"""Fetches the 3-channel (NO2, SO2, VIIRS) Earth Engine tile the CNN
+(Track B) expects, centered on a point - not the uploaded image at all.
 
 Deliberately mirrors the training pipeline's tile geometry exactly
-(`ml-service/training/export_tiles.py`'s `size_km=60, px=64`) - using a
-different window here than what the model was trained on would silently
-degrade predictions with no error, so these constants must stay in sync
-with the training script's. `ensure_initialized`/`fetch_band_tile` are
-public (not underscore-prefixed) specifically so training scripts can
+(`ml-service/training/export_tiles_3channel.py`'s `size_km=60, px=64`) -
+using a different window here than what the model was trained on would
+silently degrade predictions with no error, so these constants must stay
+in sync with the training script's. `ensure_initialized`/`fetch_band_tile`
+are public (not underscore-prefixed) specifically so training scripts can
 reuse them rather than duplicating the GEE query logic.
+
+Was 2-channel (NO2, SO2) wired to a Detector2 architecture; upgraded to
+3-channel (NO2, SO2, VIIRS) to match the research repo's actual trained
+detector (Detector3, exhaustive-LOFO-evaluated at 69.1% recall - see
+weights/README.md's Provenance section) rather than the earlier,
+never-actually-trained 2-channel placeholder.
 """
 import io
 
@@ -64,9 +70,12 @@ class GeeTileClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def fetch_no2_so2_tile(self, *, lat: float, lon: float, year: int):
-        """Returns a (2, 64, 64) float32 array: [NO2, SO2] - same shape and
-        band order train_2channel.py's Detector2 expects (Conv2d(2, ...))."""
+    def fetch_no2_so2_viirs_tile(self, *, lat: float, lon: float, year: int):
+        """Returns a (3, 64, 64) float32 array: [NO2, SO2, VIIRS] - same
+        shape and band order train_3channel.py's Detector3 expects
+        (Conv2d(3, ...)). VIIRS source/band (NASA/VIIRS/002/VNP14A1,
+        MaxFRP - daily 1km active-fire/thermal-anomaly product) matches the
+        research repo's export_viirs.py exactly."""
         import numpy as np
 
         ensure_initialized(self._settings)
@@ -84,4 +93,11 @@ class GeeTileClient:
             lon=lon,
             year=year,
         )
-        return np.stack([no2, so2], axis=0)
+        viirs = fetch_band_tile(
+            "NASA/VIIRS/002/VNP14A1",
+            "MaxFRP",
+            lat=lat,
+            lon=lon,
+            year=year,
+        )
+        return np.stack([no2, so2, viirs], axis=0)
