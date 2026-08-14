@@ -37,4 +37,13 @@ async def nearest_plant(
         co2_emission_tonnes_per_year_estimated=plant.co2_emission_tonnes_per_year_estimated,
         co2_estimate_low=plant.co2_estimate_low,
         co2_estimate_high=plant.co2_estimate_high,
+        co2_ground_truth_tonnes_per_year=plant.co2_ground_truth_tonnes_per_year,
+        co2_corrected_tonnes_per_year=plant.co2_corrected_tonnes_per_year,
+        co2_correction_significant=plant.co2_correction_significant,
+        co2_ground_truth_validation_status=plant.co2_ground_truth_validation_status,
+        co2_climate_trace_tonnes=plant.co2_climate_trace_tonnes,
+        co2_climate_trace_ratio=plant.co2_climate_trace_ratio,
+        co2_climate_trace_bracketed=plant.co2_climate_trace_bracketed,
+        detection_exhaustive_lofo_recall=plant.detection_exhaustive_lofo_recall,
+        detection_validation_status=plant.detection_validation_status,
     )
