@@ -38,6 +38,7 @@ import { DrawingToolbar } from "@/features/maps/components/gis-tools/drawing-too
 import { TimelineBar, type TimelinePeriod } from "@/features/maps/components/timeline/timeline-bar";
 import { ComparisonPanel, type ComparisonType } from "@/features/maps/components/comparison/comparison-panel";
 import { InspectorDrawer, type InspectedFacility } from "@/features/maps/components/facility-inspector/inspector-drawer";
+import { PlantInfoBar } from "@/features/maps/components/facility-inspector/plant-info-bar";
 import { AlertsBadge, type MapAlert } from "@/features/maps/components/alerts/alerts-badge";
 import { ExportMenu } from "@/features/maps/components/export-share/export-menu";
 import { ShareDialog } from "@/features/maps/components/export-share/share-dialog";
@@ -253,7 +254,6 @@ export default function MapPage() {
     setSelectedFacility(result.raw as Parameters<typeof setSelectedFacility>[0]);
     setSearchQuery(result.name);
     setCameraTarget({ lat: result.lat, lon: result.lon });
-    openInspectorDrawer();
   };
 
   const handleSelectAlert = (alert: MapAlert) => {
@@ -261,7 +261,6 @@ export default function MapPage() {
     const match = enrichedPlants.find((p) => p.name.toLowerCase().includes(alert.facility.split(" ")[0].toLowerCase()));
     if (match) {
       setSelectedFacility(match);
-      openInspectorDrawer();
     }
     setAlertsOpen(false);
   };
@@ -399,7 +398,6 @@ export default function MapPage() {
             if (fac.lat != null && fac.lon != null) {
               setCameraTarget({ lat: fac.lat, lon: fac.lon });
             }
-            openInspectorDrawer();
           }}
           drawingMode={drawing.drawingMode}
           comparisonMode={comparisonMode}
@@ -427,10 +425,26 @@ export default function MapPage() {
         {legendOpen && <IntensityLegend gases={gases} showGasLayer={showLayers.heatmap} />}
         {showLayers.clouds && <CloudsOverlay />}
 
-        <MapSummaryCard
-          analytics={analytics}
-          sourceCount={regionFilteredCount}
-          periodLabel={selectedRegion ? `${selectedRegion.name}` : selectedYear}
+        {inspectedFacility ? (
+          <PlantInfoBar
+            facility={inspectedFacility}
+            onOpenDetails={openInspectorDrawer}
+            onClear={() => setSelectedFacility(null)}
+          />
+        ) : (
+          <MapSummaryCard
+            analytics={analytics}
+            sourceCount={regionFilteredCount}
+            periodLabel={selectedRegion ? `${selectedRegion.name}` : selectedYear}
+          />
+        )}
+
+        <InspectorDrawer
+          open={inspectorDrawerOpen}
+          onClose={closeInspectorDrawer}
+          facility={inspectedFacility}
+          timelinePeriod={timelinePeriod}
+          sliderIndex={sliderIndex}
         />
       </div>
 
@@ -447,14 +461,6 @@ export default function MapPage() {
         onTogglePlay={() => setIsTimelinePlaying(!isTimelinePlaying)}
         playbackSpeed={playbackSpeed}
         onSpeedChange={setPlaybackSpeed}
-      />
-
-      <InspectorDrawer
-        open={inspectorDrawerOpen}
-        onClose={closeInspectorDrawer}
-        facility={inspectedFacility}
-        timelinePeriod={timelinePeriod}
-        sliderIndex={sliderIndex}
       />
 
       <ShareDialog open={shareLinkOpen} link={shareConfigLink} onClose={() => setShareLinkOpen(false)} />

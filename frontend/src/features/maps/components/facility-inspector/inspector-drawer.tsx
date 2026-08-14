@@ -37,9 +37,9 @@ export function InspectorDrawer({ open, onClose, facility, timelinePeriod, slide
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="absolute inset-0 z-40 flex flex-col justify-end">
       <div className="absolute inset-0 bg-ground-950/60 backdrop-blur-sm" onClick={onClose} />
-      <Card className="glass-strong relative w-full max-w-md h-full rounded-none overflow-y-auto p-5 space-y-4 animate-in slide-in-from-right duration-200">
+      <Card className="glass-strong relative w-full max-h-[70%] rounded-b-none overflow-y-auto p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
         <div className="flex items-center justify-between border-b border-ground-750 pb-2">
           <h3 className="text-xs uppercase font-bold tracking-wider text-ground-400 flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5" /> Industrial Facility Inspector
