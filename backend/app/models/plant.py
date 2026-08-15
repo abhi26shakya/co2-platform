@@ -58,6 +58,15 @@ class Plant(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # should prefer - that's deliberately left to the caller.
     co2_ground_truth_tonnes_per_year: Mapped[float | None] = mapped_column(Float)
     co2_corrected_tonnes_per_year: Mapped[float | None] = mapped_column(Float)
+    # Absolute uncertainty (tons/year) to build a [corrected-std, corrected+std]
+    # range from co2_corrected_tonnes_per_year - the research repo's ground-
+    # truth correction adjusts the point estimate's bias but doesn't
+    # recompute uncertainty, so this reuses the RAW Track B estimate's own
+    # 3-term uncertainty (track_b.raw_estimate.q_t_per_year_std in the
+    # export) as the best available uncertainty magnitude for the
+    # corrected value too. An approximation, not a re-derived figure -
+    # documented here so it isn't mistaken for one.
+    co2_corrected_std: Mapped[float | None] = mapped_column(Float)
     co2_correction_significant: Mapped[bool | None] = mapped_column(Boolean)
     co2_ground_truth_validation_status: Mapped[str | None] = mapped_column(String(50))
 

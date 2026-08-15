@@ -29,6 +29,7 @@ class NearestPlantOut(BaseModel):
     # ground-truth-matched.
     co2_ground_truth_tonnes_per_year: float | None
     co2_corrected_tonnes_per_year: float | None
+    co2_corrected_std: float | None
     co2_correction_significant: bool | None
     co2_ground_truth_validation_status: str | None
     co2_climate_trace_tonnes: float | None

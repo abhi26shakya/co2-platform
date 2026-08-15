@@ -22,6 +22,13 @@ class NearestPlant:
     co2_emission_tonnes_per_year_estimated: float | None
     co2_estimate_low: float | None
     co2_estimate_high: float | None
+    # Ground-truth-validated fields (research repo export, via load_co2.py)
+    # - defaulted so existing callers/tests that don't pass them keep
+    # working; see CombinedPredictor.predict() for how these are preferred
+    # over the co2_*_estimated fields above when available.
+    co2_corrected_tonnes_per_year: float | None = None
+    co2_corrected_std: float | None = None
+    co2_ground_truth_validation_status: str | None = None
 
 
 class BackendClient:
@@ -48,4 +55,7 @@ class BackendClient:
             co2_emission_tonnes_per_year_estimated=body["co2_emission_tonnes_per_year_estimated"],
             co2_estimate_low=body["co2_estimate_low"],
             co2_estimate_high=body["co2_estimate_high"],
+            co2_corrected_tonnes_per_year=body.get("co2_corrected_tonnes_per_year"),
+            co2_corrected_std=body.get("co2_corrected_std"),
+            co2_ground_truth_validation_status=body.get("co2_ground_truth_validation_status"),
         )

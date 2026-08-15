@@ -40,6 +40,7 @@ class PredictionResultV2(BaseModel):
     co2_estimate_low: float | None = None
     co2_estimate_high: float | None = None
     co2_ppm_enhancement: float | None = None
+    ground_truth_validated: bool = False
     hotspots: list[Hotspot]
     heatmap_url: str | None = None
     model_version: str

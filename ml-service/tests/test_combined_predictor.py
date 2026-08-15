@@ -113,6 +113,61 @@ def test_backend_unreachable_falls_back_gracefully():
     assert result.co2_emission_tonnes_per_year is None
 
 
+def test_ground_truth_corrected_estimate_preferred_over_placeholder_formula():
+    """When a plant has BOTH the platform's own placeholder-formula estimate
+    AND a ground-truth-corrected one, the corrected one wins - and
+    ground_truth_validated must say so."""
+    plant = NearestPlant(
+        name="Test Plant",
+        distance_km=3.2,
+        co2_enhancement_ppm=2.0,
+        co2_emission_tonnes_per_year_estimated=4800.0,  # placeholder formula - should be ignored
+        co2_estimate_low=3000.0,
+        co2_estimate_high=6600.0,
+        co2_corrected_tonnes_per_year=49_364_960.0,
+        co2_corrected_std=17_689_788.0,
+        co2_ground_truth_validation_status="cea_ground_truth_matched",
+    )
+    predictor = CombinedPredictor(
+        settings=Settings(),
+        tile_fetcher=FakeTileFetcher(),
+        plant_lookup=FakePlantLookup(plant=plant),
+        cnn=FakeScorer(0.85),
+    )
+    result = predictor.predict(PredictionRequest(image_id="x", bounds=BOUNDS))
+    assert result.data_source == "oco3_estimated"
+    assert result.ground_truth_validated is True
+    assert result.co2_emission_tonnes_per_year == 49_364_960.0
+    assert result.co2_estimate_low == 49_364_960.0 - 17_689_788.0
+    assert result.co2_estimate_high == 49_364_960.0 + 17_689_788.0
+
+
+def test_placeholder_formula_used_when_not_ground_truth_matched():
+    """Not matched against CEA ground truth (validation_status is None or
+    anything else) - falls back to the placeholder formula, exactly the
+    pre-existing behavior, with ground_truth_validated left False."""
+    plant = NearestPlant(
+        name="Test Plant",
+        distance_km=3.2,
+        co2_enhancement_ppm=2.0,
+        co2_emission_tonnes_per_year_estimated=4800.0,
+        co2_estimate_low=3000.0,
+        co2_estimate_high=6600.0,
+        co2_corrected_tonnes_per_year=49_364_960.0,  # present, but not validated
+        co2_ground_truth_validation_status="not_matched",
+    )
+    predictor = CombinedPredictor(
+        settings=Settings(),
+        tile_fetcher=FakeTileFetcher(),
+        plant_lookup=FakePlantLookup(plant=plant),
+        cnn=FakeScorer(0.85),
+    )
+    result = predictor.predict(PredictionRequest(image_id="x", bounds=BOUNDS))
+    assert result.data_source == "oco3_estimated"
+    assert result.ground_truth_validated is False
+    assert result.co2_emission_tonnes_per_year == 4800.0
+
+
 def test_plant_with_no_estimate_yet_falls_back_to_cnn_proxy():
     """A plant can exist within range but have no OCO-3 analysis yet
     (co2_emission_tonnes_per_year_estimated is null) - must not be treated

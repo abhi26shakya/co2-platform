@@ -64,6 +64,21 @@ class PredictionResultV2(BaseModel):
     co2_estimate_low: float | None = None
     co2_estimate_high: float | None = None
     co2_ppm_enhancement: float | None = None
+    ground_truth_validated: bool = Field(
+        default=False,
+        description=(
+            "True only when co2_emission_tonnes_per_year comes from a facility matched "
+            "against India's CEA CO2 Baseline Database (real, non-satellite, fuel-"
+            "consumption-based ground truth) with the research repo's bias correction "
+            "applied - NOT this platform's own placeholder mass-balance formula "
+            "(emissions_conversion.py). When true, co2_estimate_low/high are built from "
+            "the underlying raw estimate's own uncertainty (an approximation - the "
+            "correction adjusts bias, not uncertainty - see Plant.co2_corrected_std). "
+            "When false but data_source is 'oco3_estimated', the figure is this "
+            "platform's own unvalidated formula output. Always check this field before "
+            "presenting the tonnes figure as more than a rough estimate."
+        ),
+    )
     hotspots: list[Hotspot]
     heatmap_url: str | None = None
     model_version: str

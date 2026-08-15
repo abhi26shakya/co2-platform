@@ -146,6 +146,10 @@ async def load() -> None:
             track_a = rec.get("track_a") or {}
 
             plant.co2_corrected_tonnes_per_year = gtc.get("corrected_q_t_per_year")
+            # Reuses the RAW estimate's own uncertainty as the corrected
+            # value's uncertainty band too - see Plant.co2_corrected_std's
+            # docstring for why.
+            plant.co2_corrected_std = (track_b.get("raw_estimate") or {}).get("q_t_per_year_std")
             plant.co2_correction_significant = gtc.get("correction_significant")
             plant.co2_ground_truth_validation_status = gtc.get("validation_status")
             # co2_ground_truth_tonnes_per_year (the raw CEA-reported figure)
