@@ -435,6 +435,159 @@ function addDataLayers(map: mapboxgl.Map) {
   }
 }
 
+interface SyncMapDataParams {
+  plants: (PlantOut & { sector?: string })[];
+  hotspots: (MapHotspot & { sector?: string })[];
+  showPlants: boolean;
+  showHotspots: boolean;
+  selectedMode: string;
+  showLayers: ShowLayers;
+  gases: Record<string, { enabled: boolean; opacity: number }>;
+  comparisonMode: boolean;
+  comparisonType: string;
+  colorMode: "gas" | "sector";
+}
+
+/** Repopulates plants/plume/volume/cap sources + layer visibility from current data — callable
+ * both from the normal render effect and from the "Basemap swap" effect's `styledata` callback,
+ * since `setStyle()` tears down and asynchronously recreates these sources with empty data.
+ * Returns the plume features it built so callers can also refresh plumeFeaturesRef (read by the
+ * Animated Pulse interval effect). */
+function syncMapData(map: mapboxgl.Map, params: SyncMapDataParams): GeoJSON.Feature[] {
+  const {
+    plants,
+    hotspots,
+    showPlants,
+    showHotspots,
+    selectedMode,
+    showLayers,
+    gases,
+    comparisonMode,
+    comparisonType,
+    colorMode,
+  } = params;
+  const plantsSource = map.getSource(PLANTS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  const plumeSource = map.getSource(PLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  const volumeSource = map.getSource(VOLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  const capSource = map.getSource(PILL_CAP_SOURCE) as mapboxgl.GeoJSONSource | undefined;
+  if (!plantsSource || !plumeSource || !volumeSource || !capSource) return [];
+
+  const showPlantLayer = showPlants && showLayers.plants;
+  plantsSource.setData({
+    type: "FeatureCollection",
+    features: showPlantLayer
+      ? plants.map((p) => ({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+          properties: {
+            name: p.name,
+            industry: p.fuel_type || "Energy Production",
+            country: p.country,
+            lat: p.lat,
+            lon: p.lon,
+            co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—",
+            confidence: p.co2_soundings ? "91%" : "n/a",
+            satellite: "Sentinel-5P",
+            dataset: "Sentinel-5P scene",
+            color: colorMode === "sector" ? getSectorColorHex(p.sector) : null,
+          },
+        }))
+      : [],
+  });
+
+  const showPlumeLayer = showHotspots && showLayers.heatmap;
+  const plumeFeatures: GeoJSON.Feature[] = [];
+  const volumeFeatures: GeoJSON.Feature[] = [];
+  const capFeatures: GeoJSON.Feature[] = [];
+  if (showPlumeLayer) {
+    const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
+    activeGasKeys.forEach((gasKey) => {
+      const config = gases[gasKey];
+      const plumes = getGasPlumes(gasKey, hotspots);
+      plumes.forEach((plume) => {
+        const valueNorm = Math.min(1, plume.intensity);
+        const baseColorHex = colorMode === "sector" ? getSectorColorHex(plume.sector) : getGasColorHex(gasKey, valueNorm);
+        const colorHex = resolveComparisonColorHex(baseColorHex, plume, comparisonMode, comparisonType);
+        const metadata = {
+          name: `Detected ${gasKey.toUpperCase()} Plume`,
+          industry: `Greenhouse Gas Source: ${gasKey.toUpperCase()}`,
+          country: "India",
+          lat: plume.lat,
+          lon: plume.lon,
+          co2: `${plume.value.toFixed(1)} ${plume.unit}`,
+          confidence: `${Math.round(plume.intensity * 100)}%`,
+          satellite: "Sentinel-5P",
+          dataset: "Prediction Scene",
+        };
+        plumeFeatures.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [plume.lon, plume.lat] },
+          properties: { ...metadata, color: colorHex, opacity: config.opacity, intensity: valueNorm, radius_m: plume.radiusM },
+        });
+        // fill-extrusion-opacity has no data-driven (per-feature) variant in the Mapbox GL JS style
+        // spec (same limitation as heatmap-opacity above) — fold each gas layer's opacity into
+        // the extrusion color's alpha channel instead, via an rgba() string.
+        const rgb = hexToRgb(colorHex);
+        const volumeColorRgba = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})` : colorHex;
+        const shaftHeight = 4000 + valueNorm * 90000;
+        volumeFeatures.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [buildColumnFootprint(plume.lat, plume.lon)] },
+          properties: { ...metadata, color: volumeColorRgba, height: shaftHeight },
+        });
+        capFeatures.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [buildCircularCapFootprint(plume.lat, plume.lon)] },
+          properties: { ...metadata, color: volumeColorRgba, base: shaftHeight, height: shaftHeight + 3000 },
+        });
+      });
+    });
+  }
+  plumeSource.setData({ type: "FeatureCollection", features: plumeFeatures });
+  volumeSource.setData({ type: "FeatureCollection", features: volumeFeatures });
+  capSource.setData({ type: "FeatureCollection", features: capFeatures });
+
+  const activeGasPlumeLayer =
+    selectedMode === "markers"
+      ? "gas-markers"
+      : selectedMode === "contours"
+        ? "contours"
+        : selectedMode === "volume3d"
+          ? "volume3d"
+          : selectedMode === "pill3d"
+            ? "pill3d"
+            : selectedMode === "animated"
+              ? "animated"
+              : "gas-heatmap";
+  const visibility = (id: string, show: boolean) => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
+  };
+  visibility("gas-heatmap", showPlumeLayer && activeGasPlumeLayer === "gas-heatmap");
+  visibility("gas-markers", showPlumeLayer && activeGasPlumeLayer === "gas-markers");
+  visibility(
+    "gas-volume-extrusion",
+    showPlumeLayer && (activeGasPlumeLayer === "volume3d" || activeGasPlumeLayer === "pill3d")
+  );
+  visibility("gas-pill-cap", showPlumeLayer && activeGasPlumeLayer === "pill3d");
+  visibility("gas-animated-pulse", showPlumeLayer && activeGasPlumeLayer === "animated");
+  visibility(
+    "gas-markers-glow",
+    showPlumeLayer && (activeGasPlumeLayer === "gas-markers" || activeGasPlumeLayer === "animated")
+  );
+  // "contours" is both a full render mode and an always-on overlay toggle (showLayers.contours) —
+  // show the ring layers whenever either wants them.
+  const showContourRings = showPlumeLayer && (activeGasPlumeLayer === "contours" || showLayers.contours);
+  visibility("gas-contour-inner", showContourRings);
+  visibility("gas-contour-outer", showContourRings);
+
+  visibility("plants-prediction-label", showPlantLayer && showLayers.prediction);
+  visibility("boundaries-overlay", showLayers.boundaries);
+  visibility("roads-overlay", showLayers.roads);
+  visibility("population-overlay", showLayers.population);
+
+  return plumeFeatures;
+}
+
 export default function MapboxMap({
   plants,
   hotspots,
@@ -472,6 +625,18 @@ export default function MapboxMap({
   const [helpOpen, setHelpOpen] = useState(false);
 
   const { camera, setCamera, selectedFacility, setSelectedFacility, gases, mapMode } = useMapStore();
+
+  // Kept fresh after every render so the async `styledata` callback in the "Basemap swap" effect
+  // below always reads current data, not a stale closure. No dependency array — must resync
+  // whenever any of these change, and this is cheaper than duplicating them as a dep list.
+  const syncParamsRef = useRef<SyncMapDataParams>({
+    plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, colorMode,
+  });
+  useEffect(() => {
+    syncParamsRef.current = {
+      plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, colorMode,
+    };
+  });
 
   // Init map
   useEffect(() => {
@@ -604,7 +769,11 @@ export default function MapboxMap({
     }
   }, [mapMode, mapReady]);
 
-  // Basemap swap
+  // Basemap swap — setStyle() tears down all sources/layers and rebuilds them asynchronously, so
+  // the plants/plume/volume/cap data must be reapplied inside the `styledata` callback itself (not
+  // left to the separate render-plants effect, which can run before the new sources exist and
+  // no-op on its own source-existence guard). syncParamsRef keeps this callback's data current
+  // even though it isn't in this effect's own dependency array.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -613,14 +782,12 @@ export default function MapboxMap({
       return;
     }
 
-    const applyStyle = () => {
-      map.setStyle(getBasemapStyleUrl(activeBasemap));
-      map.once("styledata", () => {
-        addDataLayers(map);
-        applyGlobeFog(map, useMapStore.getState().mapMode === "3d");
-      });
-    };
-    applyStyle();
+    map.setStyle(getBasemapStyleUrl(activeBasemap));
+    map.once("styledata", () => {
+      addDataLayers(map);
+      applyGlobeFog(map, useMapStore.getState().mapMode === "3d");
+      plumeFeaturesRef.current = syncMapData(map, syncParamsRef.current);
+    });
   }, [activeBasemap, mapReady]);
 
   // Fly to selected facility
@@ -670,125 +837,18 @@ export default function MapboxMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const plantsSource = map.getSource(PLANTS_SOURCE) as mapboxgl.GeoJSONSource | undefined;
-    const plumeSource = map.getSource(PLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
-    const volumeSource = map.getSource(VOLUME_SOURCE) as mapboxgl.GeoJSONSource | undefined;
-    const capSource = map.getSource(PILL_CAP_SOURCE) as mapboxgl.GeoJSONSource | undefined;
-    if (!plantsSource || !plumeSource || !volumeSource || !capSource) return;
-
-    const showPlantLayer = showPlants && showLayers.plants;
-    plantsSource.setData({
-      type: "FeatureCollection",
-      features: showPlantLayer
-        ? plants.map((p) => ({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-            properties: {
-              name: p.name,
-              industry: p.fuel_type || "Energy Production",
-              country: p.country,
-              lat: p.lat,
-              lon: p.lon,
-              co2: p.co2_enhancement_ppm ? p.co2_enhancement_ppm.toFixed(2) : "—",
-              confidence: p.co2_soundings ? "91%" : "n/a",
-              satellite: "Sentinel-5P",
-              dataset: "Sentinel-5P scene",
-              color: colorMode === "sector" ? getSectorColorHex(p.sector) : null,
-            },
-          }))
-        : [],
+    plumeFeaturesRef.current = syncMapData(map, {
+      plants,
+      hotspots,
+      showPlants,
+      showHotspots,
+      selectedMode,
+      showLayers,
+      gases,
+      comparisonMode,
+      comparisonType,
+      colorMode,
     });
-
-    const showPlumeLayer = showHotspots && showLayers.heatmap;
-    const plumeFeatures: GeoJSON.Feature[] = [];
-    const volumeFeatures: GeoJSON.Feature[] = [];
-    const capFeatures: GeoJSON.Feature[] = [];
-    if (showPlumeLayer) {
-      const activeGasKeys = Object.keys(gases).filter((k) => gases[k].enabled);
-      activeGasKeys.forEach((gasKey) => {
-        const config = gases[gasKey];
-        const plumes = getGasPlumes(gasKey, hotspots);
-        plumes.forEach((plume) => {
-          const valueNorm = Math.min(1, plume.intensity);
-          const baseColorHex = colorMode === "sector" ? getSectorColorHex(plume.sector) : getGasColorHex(gasKey, valueNorm);
-          const colorHex = resolveComparisonColorHex(baseColorHex, plume, comparisonMode, comparisonType);
-          const metadata = {
-            name: `Detected ${gasKey.toUpperCase()} Plume`,
-            industry: `Greenhouse Gas Source: ${gasKey.toUpperCase()}`,
-            country: "India",
-            lat: plume.lat,
-            lon: plume.lon,
-            co2: `${plume.value.toFixed(1)} ${plume.unit}`,
-            confidence: `${Math.round(plume.intensity * 100)}%`,
-            satellite: "Sentinel-5P",
-            dataset: "Prediction Scene",
-          };
-          plumeFeatures.push({
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [plume.lon, plume.lat] },
-            properties: { ...metadata, color: colorHex, opacity: config.opacity, intensity: valueNorm, radius_m: plume.radiusM },
-          });
-          // fill-extrusion-opacity has no data-driven (per-feature) variant in the Mapbox GL JS style
-          // spec (same limitation as heatmap-opacity above) — fold each gas layer's opacity into
-          // the extrusion color's alpha channel instead, via an rgba() string.
-          const rgb = hexToRgb(colorHex);
-          const volumeColorRgba = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${config.opacity})` : colorHex;
-          const shaftHeight = 4000 + valueNorm * 90000;
-          volumeFeatures.push({
-            type: "Feature",
-            geometry: { type: "Polygon", coordinates: [buildColumnFootprint(plume.lat, plume.lon)] },
-            properties: { ...metadata, color: volumeColorRgba, height: shaftHeight },
-          });
-          capFeatures.push({
-            type: "Feature",
-            geometry: { type: "Polygon", coordinates: [buildCircularCapFootprint(plume.lat, plume.lon)] },
-            properties: { ...metadata, color: volumeColorRgba, base: shaftHeight, height: shaftHeight + 3000 },
-          });
-        });
-      });
-    }
-    plumeSource.setData({ type: "FeatureCollection", features: plumeFeatures });
-    volumeSource.setData({ type: "FeatureCollection", features: volumeFeatures });
-    capSource.setData({ type: "FeatureCollection", features: capFeatures });
-    plumeFeaturesRef.current = plumeFeatures;
-
-    const activeGasPlumeLayer =
-      selectedMode === "markers"
-        ? "gas-markers"
-        : selectedMode === "contours"
-          ? "contours"
-          : selectedMode === "volume3d"
-            ? "volume3d"
-            : selectedMode === "pill3d"
-              ? "pill3d"
-              : selectedMode === "animated"
-                ? "animated"
-                : "gas-heatmap";
-    const visibility = (id: string, show: boolean) => {
-      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", show ? "visible" : "none");
-    };
-    visibility("gas-heatmap", showPlumeLayer && activeGasPlumeLayer === "gas-heatmap");
-    visibility("gas-markers", showPlumeLayer && activeGasPlumeLayer === "gas-markers");
-    visibility(
-      "gas-volume-extrusion",
-      showPlumeLayer && (activeGasPlumeLayer === "volume3d" || activeGasPlumeLayer === "pill3d")
-    );
-    visibility("gas-pill-cap", showPlumeLayer && activeGasPlumeLayer === "pill3d");
-    visibility("gas-animated-pulse", showPlumeLayer && activeGasPlumeLayer === "animated");
-    visibility(
-      "gas-markers-glow",
-      showPlumeLayer && (activeGasPlumeLayer === "gas-markers" || activeGasPlumeLayer === "animated")
-    );
-    // "contours" is both a full render mode and an always-on overlay toggle (showLayers.contours) —
-    // show the ring layers whenever either wants them.
-    const showContourRings = showPlumeLayer && (activeGasPlumeLayer === "contours" || showLayers.contours);
-    visibility("gas-contour-inner", showContourRings);
-    visibility("gas-contour-outer", showContourRings);
-
-    visibility("plants-prediction-label", showPlantLayer && showLayers.prediction);
-    visibility("boundaries-overlay", showLayers.boundaries);
-    visibility("roads-overlay", showLayers.roads);
-    visibility("population-overlay", showLayers.population);
   }, [plants, hotspots, showPlants, showHotspots, selectedMode, showLayers, gases, comparisonMode, comparisonType, colorMode, mapReady]);
 
   // Animated Pulse mode — recomputes radius/opacity on an interval from the last-built plume
