@@ -33,6 +33,7 @@ class PredictionOut(BaseModel):
     co2_ppm_enhancement: float | None = None
     co2_estimate_low: float | None = None
     co2_estimate_high: float | None = None
+    ground_truth_validated: bool | None = None
     # populated by service, not ORM - heatmap_url comes from the heatmap_key
     # column, which despite its name stores whatever URL the ML service
     # returned (not a backend-owned storage key).

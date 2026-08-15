@@ -32,6 +32,7 @@ describe("useRunPrediction", () => {
       co2_ppm_enhancement: null,
       co2_estimate_low: null,
       co2_estimate_high: null,
+      ground_truth_validated: null,
       model_version: "v1.2.0",
       image_filename: "vindhyachal.tif",
     };

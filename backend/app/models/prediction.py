@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Float, ForeignKey, Index, String, Uuid
+from sqlalchemy import Boolean, Float, ForeignKey, Index, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,3 +42,8 @@ class Prediction(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     co2_ppm_enhancement: Mapped[float | None] = mapped_column(Float)
     co2_estimate_low: Mapped[float | None] = mapped_column(Float)
     co2_estimate_high: Mapped[float | None] = mapped_column(Float)
+    # True only when co2_emission_tonnes_per_year came from the research
+    # repo's CEA-ground-truth-corrected estimate, not this platform's own
+    # placeholder mass-balance formula - see PredictionResultV2's
+    # ground_truth_validated docstring (schemas/prediction.py).
+    ground_truth_validated: Mapped[bool | None] = mapped_column(Boolean)
