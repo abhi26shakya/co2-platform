@@ -72,13 +72,49 @@ async def load() -> None:
     export = json.loads(FACILITIES_PATH.read_text())
     facility_records = export["facilities"]
 
+    # Coordinate-proximity match radius (degrees) for the fallback below -
+    # roughly 5km at these latitudes. Deliberately loose: real duplicate
+    # discovered live (2026-08-15) had the SAME plant 0.24 degrees apart
+    # (~24km) between two independent data sources (this project's own
+    # coordinates vs. a bulk Global Power Plant Database import) for the
+    # same named facility.
+    COORD_MATCH_DEG = 0.3
+
     async with async_session_maker() as session:
+        all_plants = list(await session.scalars(select(Plant)))
         for rec in facility_records:
             name = rec["name"]
             ext = _external_id_for(name)
             raw = raw_by_name.get(name, {})
 
             plant = await session.scalar(select(Plant).where(Plant.external_id == ext))
+            if plant is None:
+                # Fallback: this exact external_id doesn't exist, but the
+                # SAME physical plant might already exist under a
+                # completely different external_id scheme this script has
+                # no static way to know about in advance (e.g. a bulk GPPD
+                # import using real numeric IDs). Match by name substring
+                # + coordinate proximity rather than blindly creating a
+                # second row for a plant that's already there - discovered
+                # the hard way (6 duplicate pairs, one this script's own
+                # earlier version created) when this repo's own dev DB
+                # turned out to have both a demo-seeded short-ID row and a
+                # separately-imported real-GPPD-ID row for several plants.
+                candidate = next(
+                    (
+                        p for p in all_plants
+                        if (name.lower() in p.name.lower() or p.name.lower() in name.lower())
+                        and abs(p.lat - rec["lat"]) < COORD_MATCH_DEG
+                        and abs(p.lon - rec["lon"]) < COORD_MATCH_DEG
+                    ),
+                    None,
+                )
+                if candidate is not None:
+                    plant = candidate
+                    print(
+                        f"matched {name} to existing plant {plant.name} "
+                        f"({plant.external_id}) by name+coordinates, not external_id"
+                    )
             if plant is None:
                 info = NEW.get(ext, {})
                 plant = Plant(
@@ -91,6 +127,7 @@ async def load() -> None:
                     lon=rec["lon"],
                 )
                 session.add(plant)
+                all_plants.append(plant)
                 print(f"created plant {plant.name} ({ext})")
 
             # Raw OCO-3/NO2 fields (from plant_results.json, keys unchanged
@@ -129,7 +166,7 @@ async def load() -> None:
                 "provenance": rec.get("provenance"),
             }
 
-            print(f"loaded CO2 for {name} ({ext})")
+            print(f"loaded CO2 for {name} ({plant.external_id})")
 
         await session.commit()
     print("done")
