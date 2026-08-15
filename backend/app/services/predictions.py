@@ -77,6 +77,7 @@ class PredictionService:
                 co2_ppm_enhancement=result.co2_ppm_enhancement if is_v2 else None,
                 co2_estimate_low=result.co2_estimate_low if is_v2 else None,
                 co2_estimate_high=result.co2_estimate_high if is_v2 else None,
+                ground_truth_validated=result.ground_truth_validated if is_v2 else None,
             )
         )
         self.session.add(

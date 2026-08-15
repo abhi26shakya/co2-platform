@@ -19,6 +19,11 @@ export interface PredictionOut {
   co2_ppm_enhancement: number | null;
   co2_estimate_low: number | null;
   co2_estimate_high: number | null;
+  // True only when co2_emission_tonnes_per_year came from the research
+  // repo's CEA-ground-truth-corrected estimate, not this platform's own
+  // placeholder mass-balance formula. Null on v1 rows and on v2 rows
+  // where data_source isn't "oco3_estimated".
+  ground_truth_validated: boolean | null;
   model_version: string | null;
   image_filename: string | null;
 }

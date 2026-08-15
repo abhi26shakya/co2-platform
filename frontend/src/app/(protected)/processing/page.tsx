@@ -276,12 +276,18 @@ export default function ProcessingPage() {
                 <span
                   className={cn(
                     "text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full border",
-                    result?.data_source === "oco3_estimated"
-                      ? "border-sensor/30 text-sensor bg-sensor/5"
-                      : "border-ground-700 text-ground-400 bg-ground-800"
+                    result?.ground_truth_validated
+                      ? "border-halo/30 text-halo bg-halo/10"
+                      : result?.data_source === "oco3_estimated"
+                        ? "border-sensor/30 text-sensor bg-sensor/5"
+                        : "border-ground-700 text-ground-400 bg-ground-800"
                   )}
                 >
-                  {result?.data_source === "oco3_estimated" ? "OCO-3 estimate" : "AI-detected, unconfirmed"}
+                  {result?.ground_truth_validated
+                    ? "CEA ground-truth validated"
+                    : result?.data_source === "oco3_estimated"
+                      ? "OCO-3 estimate (unvalidated)"
+                      : "AI-detected, unconfirmed"}
                 </span>
               )}
             </div>
