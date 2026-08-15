@@ -30,12 +30,20 @@ services:
     ports:
       - "8001:8001"
     environment:
+      CO2ML_PREDICTOR: ${CO2ML_PREDICTOR:-mock}
       CO2ML_GEE_SERVICE_ACCOUNT_EMAIL: ${CO2ML_GEE_SERVICE_ACCOUNT_EMAIL:-}
       CO2ML_GEE_SERVICE_ACCOUNT_KEY_PATH: /run/secrets/gee-service-account.json
       CO2ML_GEE_PROJECT_ID: ${CO2ML_GEE_PROJECT_ID:-}
       CO2ML_NASA_EARTHDATA_USERNAME: ${CO2ML_NASA_EARTHDATA_USERNAME:-}
       CO2ML_NASA_EARTHDATA_PASSWORD: ${CO2ML_NASA_EARTHDATA_PASSWORD:-}
-      CO2ML_BACKEND_INTERNAL_URL: http://backend:8000
+      # Defaults to the docker-compose service name, for --profile full
+      # (backend also in Docker). This repo's normal documented local-dev
+      # workflow runs backend on the HOST instead (CLAUDE.md) - in that
+      # mode, override via CO2ML_BACKEND_INTERNAL_URL=http://host.docker.internal:8000
+      # in a root .env, or ml-service can't reach it (verified live: the
+      # hardcoded "backend" hostname doesn't resolve from the container
+      # when backend isn't also in the compose network).
+      CO2ML_BACKEND_INTERNAL_URL: ${CO2ML_BACKEND_INTERNAL_URL:-http://backend:8000}
     volumes:
       - ./secrets:/run/secrets:ro
     healthcheck:
