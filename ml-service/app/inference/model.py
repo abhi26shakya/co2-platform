@@ -32,6 +32,24 @@ DEFAULT_WEIGHTS_PATH = Path(__file__).resolve().parent.parent.parent / "weights"
 DEFAULT_TILE_YEAR = 2024
 MAX_PLANT_DISTANCE_KM = 25.0
 
+# Fixed, dataset-level per-channel [NO2, SO2, VIIRS] normalization stats,
+# computed once from the research repo's actual training set (996 -> 1116
+# tiles across data/threech/{positive,hard_negative,negative}, the exact
+# set train_3channel.py's run(Xp+Xh+Xr, ..., "2ch_mixed", split="facility")
+# used to produce the shipped detector3_2ch_mixed_facility_split.pt
+# checkpoint). MUST be fixed constants, not recomputed per-tile at
+# inference time - discovered live, against real Earth Engine data, that
+# the original per-tile normalization (each tile normalized against its
+# OWN mean/std) is a real train/inference methodology mismatch: on a
+# near-featureless open-ocean control tile (no plant, VIIRS exactly 0),
+# per-tile normalization gave P(plant)=1.00; the correct dataset-level
+# normalization below gives 0.19, matching how the model actually saw
+# data during training. A flat or low-variance tile has its tiny noise
+# amplified to unit variance under per-tile normalization, regardless of
+# whether the raw values are anywhere near a real plant signature.
+_TRAIN_MEAN = [5.582714220508933e-05, 0.00019338501442689449, 0.025546476244926453]
+_TRAIN_STD = [5.762084401794709e-05, 0.00023455412883777171, 0.8750804662704468]
+
 
 class TileFetcher(Protocol):
     def fetch_no2_so2_viirs_tile(self, *, lat: float, lon: float, year: int): ...
@@ -97,8 +115,7 @@ class _TorchCnnScorer:
 
         x = tile.astype("float32").copy()
         for c in range(x.shape[0]):
-            mean, std = float(np.mean(x[c])), float(np.std(x[c])) + 1e-12
-            x[c] = (x[c] - mean) / std
+            x[c] = (x[c] - _TRAIN_MEAN[c]) / _TRAIN_STD[c]
         with self._torch.no_grad():
             logits = self._model(self._torch.tensor(x[None]))
             return self._torch.softmax(logits, dim=1)[0, 1].item()
