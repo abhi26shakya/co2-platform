@@ -186,10 +186,37 @@ class CombinedPredictor:
 
         data_source = "unavailable"
         tonnes = low = high = ppm = None
+        ground_truth_validated = False
 
         if lat is not None and lon is not None:
             plant = self._lookup_plant(lat, lon)
-            if plant is not None and plant.co2_emission_tonnes_per_year_estimated is not None:
+            has_ground_truth = (
+                plant is not None
+                and plant.co2_ground_truth_validation_status == "cea_ground_truth_matched"
+                and plant.co2_corrected_tonnes_per_year is not None
+            )
+            if has_ground_truth:
+                # Prefer the research repo's ground-truth-corrected estimate
+                # over this platform's own placeholder mass-balance formula
+                # whenever both exist - see PredictionResultV2's
+                # ground_truth_validated field for what this promise means
+                # and doesn't mean (bias-corrected, not re-derived
+                # uncertainty).
+                data_source = "oco3_estimated"
+                ground_truth_validated = True
+                tonnes = plant.co2_corrected_tonnes_per_year
+                std = plant.co2_corrected_std or 0.0
+                low, high = max(0.0, tonnes - std), tonnes + std
+                ppm = plant.co2_enhancement_ppm
+                hotspots = [
+                    Hotspot(
+                        lat=lat,
+                        lon=lon,
+                        intensity=min(1.0, detection_confidence / 100),
+                        radius_m=1000.0,
+                    )
+                ]
+            elif plant is not None and plant.co2_emission_tonnes_per_year_estimated is not None:
                 data_source = "oco3_estimated"
                 tonnes = plant.co2_emission_tonnes_per_year_estimated
                 low, high = plant.co2_estimate_low, plant.co2_estimate_high
@@ -215,6 +242,7 @@ class CombinedPredictor:
             co2_estimate_low=low,
             co2_estimate_high=high,
             co2_ppm_enhancement=ppm,
+            ground_truth_validated=ground_truth_validated,
             hotspots=hotspots,
             model_version=MODEL_VERSION,
             inference_time_ms=round((time.perf_counter() - started) * 1000, 2),
